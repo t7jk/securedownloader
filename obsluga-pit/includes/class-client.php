@@ -74,6 +74,10 @@ class PIT_Client {
      * @return string HTML strony.
      */
     public function render_shortcode(): string {
+        if ( ! get_option( 'pit_enabled', 1 ) ) {
+            return '';
+        }
+
         $company_name    = get_option( 'pit_company_name', '' );
         $company_address = get_option( 'pit_company_address', '' );
         $company_nip     = get_option( 'pit_company_nip', '' );

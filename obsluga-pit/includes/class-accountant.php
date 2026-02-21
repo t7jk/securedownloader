@@ -142,6 +142,10 @@ class PIT_Accountant {
      * @return string HTML panelu.
      */
     public function render_shortcode(): string {
+        if ( ! get_option( 'pit_enabled', 1 ) ) {
+            return '';
+        }
+
         if ( ! $this->check_access() ) {
             if ( ! is_user_logged_in() ) {
                 $login_url = wp_login_url( get_permalink() );
@@ -224,7 +228,7 @@ class PIT_Accountant {
                 <?php wp_nonce_field( 'pit_bulk_delete_nonce', 'pit_bulk_delete_nonce' ); ?>
                 <input type="hidden" name="action" value="pit_bulk_delete_files">
 
-                <table class="pit-table" id="pit-files-table">
+                <table class="wp-list-table widefat fixed striped" id="pit-files-table">
                     <thead>
                         <tr>
                             <th><input type="checkbox" id="pit-select-all"></th>

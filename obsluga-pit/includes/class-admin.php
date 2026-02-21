@@ -18,7 +18,8 @@ class PIT_Admin {
         add_action( 'admin_init',            [ $this, 'register_settings' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'admin_post_pit_delete_file', [ $this, 'handle_delete_file' ] );
-        add_action( 'admin_post_pit_remove_accountant', [ $this, 'handle_remove_accountant' ] );
+        add_action( 'admin_post_pit_create_page', [ $this, 'handle_create_page' ] );
+        add_action( 'update_option_pit_enabled', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_accountant_users', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_accountant_page_url', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_client_page_url', [ $this, 'redirect_after_save' ] );
@@ -55,6 +56,9 @@ class PIT_Admin {
      * Rejestruje ustawienia wtyczki.
      */
     public function register_settings(): void {
+        register_setting( 'pit_options_group', 'pit_enabled', [
+            'sanitize_callback' => [ $this, 'sanitize_checkbox' ],
+        ] );
         register_setting( 'pit_options_group', 'pit_accountant_users', [
             'sanitize_callback' => [ $this, 'sanitize_user_ids' ],
         ] );
@@ -79,6 +83,15 @@ class PIT_Admin {
             '',
             null,
             'obsluga-pit-settings'
+        );
+
+        add_settings_field(
+            'pit_enabled',
+            __( 'Włącz wtyczkę', 'obsluga-pit' ),
+            [ $this, 'render_field_toggle' ],
+            'obsluga-pit-settings',
+            'pit_main_settings',
+            [ 'name' => 'pit_enabled' ]
         );
 
         add_settings_field(
@@ -116,6 +129,7 @@ class PIT_Admin {
             'pit_main_settings',
             [ 
                 'name'        => 'pit_accountant_page_url',
+                'shortcode'   => 'pit_accountant_panel',
                 'description' => __( 'Utwórz podstronę [/ksiegowy] z kodem [pit_accountant_panel] dla Księgowego', 'obsluga-pit' )
             ]
         );
@@ -128,6 +142,7 @@ class PIT_Admin {
             'pit_main_settings',
             [ 
                 'name'        => 'pit_client_page_url',
+                'shortcode'   => 'pit_client_page',
                 'description' => __( 'Utwórz podstronę [/podatnik] z kodem [pit_client_page] dla Podatnika', 'obsluga-pit' )
             ]
         );
@@ -140,7 +155,7 @@ class PIT_Admin {
             'pit_main_settings',
             [ 
                 'name'        => 'pit_accountant_users',
-                'description' => __( 'Zaznacz użytkowników, którzy będą mieli dostęp do panelu księgowego.', 'obsluga-pit' )
+                'description' => __( 'Wybierz użytkownika i kliknij "Zapisz zmiany", aby dodać go do listy księgowych.', 'obsluga-pit' )
             ]
         );
     }
@@ -156,13 +171,33 @@ class PIT_Admin {
     }
 
     public function render_field_url( array $args ): void {
-        $name  = $args['name'];
-        $value = get_option( $name, '' );
+        $name      = $args['name'];
+        $value     = get_option( $name, '' );
+        $shortcode = $args['shortcode'] ?? '';
+        
         printf(
-            '<input type="url" name="%s" value="%s" class="regular-text" placeholder="https://">',
+            '<input type="url" name="%s" value="%s" class="regular-text" placeholder="https://" id="%s">',
             esc_attr( $name ),
-            esc_attr( $value )
+            esc_attr( $value ),
+            esc_attr( $name )
         );
+        
+        if ( ! empty( $value ) && ! empty( $shortcode ) ) {
+            $page_exists = ( url_to_postid( $value ) > 0 );
+            if ( ! $page_exists ) {
+                printf(
+                    ' <a href="%s" class="button button-small">%s</a>',
+                    esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=pit_create_page&option_name=' . $name ), 'pit_create_page_' . $name ) ),
+                    esc_html__( 'Dodaj', 'obsluga-pit' )
+                );
+            }
+            printf(
+                ' <a href="%s" target="_blank" class="button button-small">%s</a>',
+                esc_url( $value ),
+                esc_html__( 'Otwórz', 'obsluga-pit' )
+            );
+        }
+        
         if ( ! empty( $args['description'] ) ) {
             printf( '<p class="description">%s</p>', esc_html( $args['description'] ) );
         }
@@ -182,17 +217,46 @@ class PIT_Admin {
         }
     }
 
-    public function sanitize_user_ids( array $input ): array {
-        $user_ids = [];
+    public function render_field_toggle( array $args ): void {
+        $name  = $args['name'];
+        $value = get_option( $name, 1 );
+        $checked = checked( 1, $value, false );
+        echo '<label class="pit-toggle">';
+        printf( '<input type="checkbox" name="%s" value="1" %s>', esc_attr( $name ), $checked );
+        echo '<span class="pit-toggle-slider"></span>';
+        echo '</label>';
+        echo '<span class="pit-toggle-label">' . ( $value ? esc_html__( 'ON', 'obsluga-pit' ) : esc_html__( 'OFF', 'obsluga-pit' ) ) . '</span>';
+    }
 
-        foreach ( $input as $user_id ) {
-            $id = (int) $user_id;
-            if ( $id > 0 && get_user_by( 'id', $id ) ) {
-                $user_ids[] = $id;
-            }
+    public function sanitize_checkbox( $input ): int {
+        return empty( $input ) ? 0 : 1;
+    }
+
+    public function sanitize_user_ids( $input ): array {
+        $existing_ids = get_option( 'pit_accountant_users', [] );
+        if ( ! is_array( $existing_ids ) ) {
+            $existing_ids = [];
         }
 
-        return array_unique( $user_ids );
+        $remove_ids = [];
+        if ( isset( $_POST['pit_remove_accountants'] ) && is_array( $_POST['pit_remove_accountants'] ) ) {
+            $remove_ids = array_map( 'intval', $_POST['pit_remove_accountants'] );
+        }
+
+        $existing_ids = array_filter( $existing_ids, fn( $id ) => ! in_array( $id, $remove_ids, true ) );
+
+        $new_id = 0;
+        if ( is_array( $input ) && ! empty( $input ) ) {
+            $new_id = (int) $input[0];
+        } elseif ( is_numeric( $input ) ) {
+            $new_id = (int) $input;
+        }
+
+        if ( $new_id > 0 && get_user_by( 'id', $new_id ) ) {
+            $existing_ids[] = $new_id;
+        }
+
+        return array_unique( array_filter( $existing_ids ) );
     }
 
     public function render_field_users( array $args ): void {
@@ -213,16 +277,18 @@ class PIT_Admin {
         }
 
         printf(
-            '<select name="%s[]" multiple="multiple" style="min-width: 300px; min-height: 150px;">',
+            '<select name="%s[]" style="min-width: 300px;">',
             esc_attr( $name )
         );
+        echo '<option value="">' . esc_html__( '— Wybierz księgowego —', 'obsluga-pit' ) . '</option>';
         
         foreach ( $users as $user ) {
-            $selected = in_array( $user->ID, $selected_ids, true );
+            if ( in_array( $user->ID, $selected_ids, true ) ) {
+                continue;
+            }
             printf(
-                '<option value="%d" %s>%s</option>',
+                '<option value="%d">%s</option>',
                 $user->ID,
-                selected( $selected, true, false ),
                 esc_html( $user->user_login )
             );
         }
@@ -235,21 +301,23 @@ class PIT_Admin {
         if ( ! empty( $selected_ids ) ) {
             echo '<h4 style="margin-top: 15px; margin-bottom: 5px;">' . esc_html__( 'Lista obecnych księgowych:', 'obsluga-pit' ) . '</h4>';
             echo '<table class="wp-list-table widefat fixed striped" style="max-width: 400px;">';
-            echo '<thead><tr><th>' . esc_html__( 'Login', 'obsluga-pit' ) . '</th><th style="width: 80px;">' . esc_html__( 'Akcje', 'obsluga-pit' ) . '</th></tr></thead>';
+            echo '<thead><tr><th>' . esc_html__( 'Login', 'obsluga-pit' ) . '</th><th style="width: 80px;">' . esc_html__( 'Usunięcie', 'obsluga-pit' ) . '</th></tr></thead>';
             echo '<tbody>';
             foreach ( $selected_ids as $user_id ) {
                 $user = get_user_by( 'id', $user_id );
                 if ( ! $user ) continue;
                 echo '<tr>';
                 echo '<td>' . esc_html( $user->user_login ) . '</td>';
-                echo '<td>';
-                echo '<a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=pit_remove_accountant&user_id=' . $user_id ), 'pit_remove_accountant_' . $user_id ) ) . '" class="button button-small button-link-delete" onclick="return confirm(\'' . esc_attr__( 'Czy na pewno usunąć tego księgowego?', 'obsluga-pit' ) . '\')">';
-                echo esc_html__( 'Usuń', 'obsluga-pit' );
-                echo '</a>';
+                echo '<td style="text-align: center;">';
+                printf(
+                    '<input type="checkbox" name="pit_remove_accountants[]" value="%d">',
+                    $user_id
+                );
                 echo '</td>';
                 echo '</tr>';
             }
             echo '</tbody></table>';
+            echo '<p class="description">' . esc_html__( 'Zaznacz księgowych do usunięcia i kliknij "Zapisz zmiany".', 'obsluga-pit' ) . '</p>';
         }
     }
 
@@ -408,7 +476,7 @@ class PIT_Admin {
         }
         ?>
         <div class="wrap obsluga-pit-wrap">
-            <h1><?php esc_html_e( 'Ustawienia Obsługa PIT', 'obsluga-pit' ); ?></h1>
+            <h1><?php esc_html_e( 'Ustawienia', 'obsluga-pit' ); ?></h1>
 
             <?php if ( empty( $accountant_url ) || empty( $client_url ) || $accountant_shortcode_missing || $client_shortcode_missing ) : ?>
                 <div class="notice notice-warning is-dismissible" style="margin-top: 10px;">
@@ -477,29 +545,66 @@ class PIT_Admin {
         exit;
     }
 
-    /**
-     * Obsługuje usuwanie księgowego z listy.
-     */
-    public function handle_remove_accountant(): void {
+    public function handle_create_page(): void {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
         }
 
-        $user_id = isset( $_GET['user_id'] ) ? (int) $_GET['user_id'] : 0;
+        $option_name = sanitize_text_field( $_GET['option_name'] ?? '' );
 
-        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'pit_remove_accountant_' . $user_id ) ) {
+        if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'pit_create_page_' . $option_name ) ) {
             wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
         }
 
-        $accountant_ids = get_option( 'pit_accountant_users', [] );
-        if ( ! is_array( $accountant_ids ) ) {
-            $accountant_ids = [];
+        $url = get_option( $option_name, '' );
+        if ( empty( $url ) ) {
+            wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&error=no_url' ) );
+            exit;
         }
 
-        $accountant_ids = array_filter( $accountant_ids, fn( $id ) => $id !== $user_id );
-        update_option( 'pit_accountant_users', array_values( $accountant_ids ) );
+        $page_configs = [
+            'pit_accountant_page_url' => [
+                'slug'      => 'ksiegowy',
+                'title'     => __( 'Księgowy', 'obsluga-pit' ),
+                'shortcode' => '[pit_accountant_panel]',
+            ],
+            'pit_client_page_url' => [
+                'slug'      => 'podatnik',
+                'title'     => __( 'Podatnik', 'obsluga-pit' ),
+                'shortcode' => '[pit_client_page]',
+            ],
+        ];
 
-        wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&accountant_removed=1' ) );
+        if ( ! isset( $page_configs[ $option_name ] ) ) {
+            wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&error=invalid_option' ) );
+            exit;
+        }
+
+        $config = $page_configs[ $option_name ];
+
+        $existing_page = get_page_by_path( $config['slug'] );
+        if ( $existing_page ) {
+            wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&page_exists=1' ) );
+            exit;
+        }
+
+        $page_id = wp_insert_post( [
+            'post_title'   => $config['title'],
+            'post_name'    => $config['slug'],
+            'post_status'  => 'publish',
+            'post_type'    => 'page',
+            'post_content' => $config['shortcode'],
+        ] );
+
+        if ( is_wp_error( $page_id ) ) {
+            wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&error=create_failed' ) );
+            exit;
+        }
+
+        $new_url = get_permalink( $page_id );
+        update_option( $option_name, $new_url );
+
+        wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&page_created=1' ) );
         exit;
     }
 }
