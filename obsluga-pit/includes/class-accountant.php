@@ -52,7 +52,7 @@ class PIT_Accountant {
      * @return array|false     Tablica z danymi lub false przy błędzie.
      */
     public function parse_filename( string $filename ): array|false {
-        $name = pathinfo( $filename, PATHINFO_FILENAME );
+        $name  = pathinfo( $filename, PATHINFO_FILENAME );
         $parts = explode( '_', $name );
 
         if ( count( $parts ) < 6 ) {
@@ -73,11 +73,12 @@ class PIT_Accountant {
             return false;
         }
 
+        $full_name = $parts[3] . ' ' . $parts[4];
+
         return [
-            'tax_year'   => $tax_year,
-            'last_name'  => $parts[3],
-            'first_name' => $parts[4],
-            'pesel'      => $pesel,
+            'tax_year'  => $tax_year,
+            'full_name' => $full_name,
+            'pesel'     => $pesel,
         ];
     }
 
@@ -246,7 +247,7 @@ class PIT_Accountant {
                                 <tr class="<?php echo $is_downloaded ? '' : 'pit-not-downloaded'; ?>">
                                     <td><input type="checkbox" name="pit_delete_ids[]" value="<?php echo esc_attr( $file->id ); ?>" class="pit-checkbox"></td>
                                     <td class="pit-lp"><?php echo $i++; ?></td>
-                                    <td data-name="<?php echo esc_attr( $file->last_name . ' ' . $file->first_name ); ?>"><?php echo esc_html( $file->last_name . ' ' . $file->first_name ); ?></td>
+                                    <td data-name="<?php echo esc_attr( $file->full_name ); ?>"><?php echo esc_html( $file->full_name ); ?></td>
                                     <td data-pesel="<?php echo esc_attr( $file->pesel ); ?>"><?php echo esc_html( substr( $file->pesel, 0, 4 ) . '....' . substr( $file->pesel, 8, 3 ) ); ?></td>
                                     <td data-year="<?php echo esc_attr( $file->tax_year ); ?>"><?php echo esc_html( $file->tax_year ); ?></td>
                                     <td data-date="<?php echo $is_downloaded ? esc_attr( $file->last_download ) : ''; ?>">
@@ -368,12 +369,11 @@ class PIT_Accountant {
             $file_url = $upload_dir['baseurl'] . '/obsluga-pit/' . $parsed['tax_year'] . '/' . $safe_name;
 
             $result = $db->insert_file( [
-                'first_name' => $parsed['first_name'],
-                'last_name'  => $parsed['last_name'],
-                'pesel'      => $parsed['pesel'],
-                'tax_year'   => $parsed['tax_year'],
-                'file_path'  => $target_path,
-                'file_url'   => $file_url,
+                'full_name' => $parsed['full_name'],
+                'pesel'     => $parsed['pesel'],
+                'tax_year'  => $parsed['tax_year'],
+                'file_path' => $target_path,
+                'file_url'  => $file_url,
             ] );
 
             if ( $result ) {
@@ -546,7 +546,7 @@ class PIT_Accountant {
             ?>
                 <tr class="<?php echo $is_downloaded ? '' : 'not-downloaded'; ?>">
                     <td><?php echo $i++; ?></td>
-                    <td><?php echo esc_html( $row->last_name . ' ' . $row->first_name ); ?></td>
+                    <td><?php echo esc_html( $row->full_name ); ?></td>
                     <td><?php echo esc_html( $row->pesel ); ?></td>
                     <td>
                         <?php echo $is_downloaded ? esc_html( $row->downloaded_at ) : '—'; ?>
@@ -653,7 +653,7 @@ class PIT_Accountant {
             ?>
                 <tr class="<?php echo $is_downloaded ? '' : 'not-downloaded'; ?>">
                     <td><?php echo $i++; ?></td>
-                    <td><?php echo esc_html( $row->last_name . ' ' . $row->first_name ); ?></td>
+                    <td><?php echo esc_html( $row->full_name ); ?></td>
                     <td><?php echo esc_html( $row->pesel ); ?></td>
                     <?php if ( $year === 0 ) : ?>
                     <td><?php echo esc_html( $row->tax_year ); ?></td>

@@ -347,7 +347,7 @@ class PIT_Admin {
                         ?>
                             <tr class="<?php echo $is_downloaded ? '' : 'pit-not-downloaded'; ?>">
                                 <td><?php echo $i++; ?></td>
-                                <td><?php echo esc_html( $file->first_name . ' ' . $file->last_name ); ?></td>
+                                <td><?php echo esc_html( $file->full_name ); ?></td>
                                 <td><?php echo esc_html( $file->pesel ); ?></td>
                                 <td><?php echo esc_html( $file->tax_year ); ?></td>
                                 <td><?php echo esc_html( $file->uploaded_at ); ?></td>
