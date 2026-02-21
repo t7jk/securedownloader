@@ -1,0 +1,313 @@
+/**
+ * PIT-11 Manager – Stylesheet
+ * Minimalistyczny, poważny wygląd dla dokumentów podatkowych
+ */
+
+/* Zmienne */
+:root {
+    --pit-bg: #f9f9f9;
+    --pit-text: #1a1a1a;
+    --pit-accent: #2c5282;
+    --pit-border: #d0d0d0;
+    --pit-warning: #fff8e1;
+    --pit-success-bg: #d4edda;
+    --pit-success-border: #c3e6cb;
+    --pit-success-text: #155724;
+    --pit-error-bg: #f8d7da;
+    --pit-error-border: #f5c6cb;
+    --pit-error-text: #721c24;
+}
+
+/* Typografia */
+body .pit-client-page,
+body .pit-accountant-panel {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    color: var(--pit-text);
+    background: var(--pit-bg);
+}
+
+body .pit-client-page h2,
+body .pit-accountant-panel h2,
+body .pit-accountant-panel h3 {
+    font-family: Georgia, 'Times New Roman', serif;
+    color: var(--pit-accent);
+}
+
+/* Kontenery */
+.pit-client-page,
+.pit-accountant-panel {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 30px;
+    background: #fff;
+    border: 1px solid var(--pit-border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+.pit-client-page {
+    max-width: 500px;
+}
+
+/* Formularze */
+.pit-client-form,
+.pit-accountant-panel form {
+    margin-top: 20px;
+}
+
+.pit-form-row {
+    margin-bottom: 15px;
+}
+
+.pit-form-row label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: var(--pit-text);
+}
+
+.pit-form-row input[type="text"],
+.pit-form-row input[type="number"],
+.pit-form-row input[type="url"],
+.pit-form-row select,
+.pit-form-row textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--pit-border);
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: Arial, Helvetica, sans-serif;
+    transition: border-color 0.2s ease;
+}
+
+.pit-form-row input:focus,
+.pit-form-row select:focus,
+.pit-form-row textarea:focus {
+    border-color: var(--pit-accent);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(44, 82, 130, 0.2);
+}
+
+.pit-form-row input[type="file"] {
+    padding: 8px;
+    border: 2px dashed var(--pit-border);
+    border-radius: 4px;
+    background: #fafafa;
+    cursor: pointer;
+}
+
+.pit-form-row input[type="file"]:hover {
+    border-color: var(--pit-accent);
+}
+
+/* Checkbox */
+.pit-checkbox-row {
+    margin: 20px 0;
+}
+
+.pit-checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    cursor: pointer;
+    font-weight: normal;
+}
+
+.pit-checkbox-label input[type="checkbox"] {
+    margin-right: 10px;
+    margin-top: 3px;
+}
+
+/* Przyciski */
+.button,
+.pit-submit-btn {
+    display: inline-block;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.button-primary,
+.pit-submit-btn {
+    background: var(--pit-accent);
+    color: #fff;
+    width: 100%;
+}
+
+.button-primary:hover,
+.pit-submit-btn:hover {
+    background: #1a365d;
+}
+
+.button-small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.button-link-delete {
+    color: #dc3232;
+}
+
+.button-link-delete:hover {
+    color: #a00;
+}
+
+/* Komunikaty */
+.pit-message {
+    padding: 15px 20px;
+    margin: 15px 0;
+    border-radius: 4px;
+    border-left: 4px solid;
+}
+
+.pit-success {
+    background: var(--pit-success-bg);
+    border-color: var(--pit-success-border);
+    color: var(--pit-success-text);
+}
+
+.pit-error {
+    background: var(--pit-error-bg);
+    border-color: var(--pit-error-border);
+    color: var(--pit-error-text);
+}
+
+/* Tabele */
+.pit-table,
+.wp-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 14px;
+}
+
+.pit-table th,
+.pit-table td,
+.wp-list-table th,
+.wp-list-table td {
+    padding: 12px;
+    text-align: left;
+    border: 1px solid var(--pit-border);
+}
+
+.pit-table th,
+.wp-list-table th {
+    background: #f0f0f0;
+    font-weight: 600;
+}
+
+.pit-table tr:nth-child(even),
+.wp-list-table tr:nth-child(even) {
+    background: #f9f9f9;
+}
+
+.pit-table tr:hover,
+.wp-list-table tr:hover {
+    background: #f5f5f5;
+}
+
+/* Wiersz niepobranego dokumentu */
+.pit-not-downloaded {
+    background: var(--pit-warning) !important;
+}
+
+.pit-not-downloaded td {
+    font-style: italic;
+}
+
+/* Informacje o firmie */
+.pit-company-info {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.pit-company-info p {
+    margin: 5px 0;
+}
+
+/* Informacja dodatkowa */
+.pit-info {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid var(--pit-border);
+    font-size: 13px;
+    color: #666;
+}
+
+/* Filtry */
+.pit-filter-form {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.pit-filter-form label {
+    margin-right: 10px;
+}
+
+/* Separator */
+hr {
+    margin: 30px 0;
+    border: none;
+    border-top: 1px solid var(--pit-border);
+}
+
+/* Panel administratora */
+.pit-manager-wrap {
+    max-width: 1200px;
+}
+
+.pit-manager-wrap .wp-list-table {
+    margin-top: 20px;
+}
+
+/* Responsywność */
+@media (max-width: 600px) {
+    .pit-client-page,
+    .pit-accountant-panel {
+        padding: 20px;
+        margin: 10px;
+    }
+
+    .pit-table th,
+    .pit-table td {
+        padding: 8px;
+        font-size: 12px;
+    }
+}
+
+/* Sortowanie tabeli */
+.pit-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.pit-table th.sortable:hover {
+    background: #e0e0e0;
+}
+
+.pit-table th .sort-icon {
+    margin-left: 5px;
+    font-size: 12px;
+    color: #999;
+}
+
+.pit-table th.sort-asc .sort-icon::after {
+    content: ' ↑';
+    color: var(--pit-accent);
+}
+
+.pit-table th.sort-desc .sort-icon::after {
+    content: ' ↓';
+    color: var(--pit-accent);
+}
