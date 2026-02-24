@@ -247,9 +247,12 @@ class PIT_Client {
 
         $db->mark_downloaded( $file->id );
 
-        $filename = 'PIT-11_' . $tax_year . '_' . sanitize_file_name( $file->full_name ) . '.pdf';
+        $is_zip   = str_ends_with( strtolower( $filepath ), '.zip' );
+        $ext      = $is_zip ? 'zip' : 'pdf';
+        $filename = 'PIT-11_' . $tax_year . '_' . sanitize_file_name( $file->full_name ) . '.' . $ext;
+        $mime     = $is_zip ? 'application/zip' : 'application/pdf';
 
-        header( 'Content-Type: application/pdf' );
+        header( 'Content-Type: ' . $mime );
         header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"' );
         header( 'Content-Length: ' . filesize( $filepath ) );
         header( 'Cache-Control: private, no-cache, no-store, must-revalidate' );

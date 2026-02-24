@@ -26,6 +26,9 @@ class PIT_Admin {
         add_action( 'update_option_pit_company_name', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_company_address', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_company_nip', [ $this, 'redirect_after_save' ] );
+        add_action( 'update_option_pit_filename_filters', [ $this, 'redirect_after_save' ] );
+        add_action( 'admin_post_pit_import_pesel_list', [ $this, 'handle_import_pesel_list' ] );
+        add_action( 'admin_post_pit_set_pesel', [ $this, 'handle_set_pesel' ] );
     }
 
     /**
@@ -45,10 +48,18 @@ class PIT_Admin {
         add_submenu_page(
             'tools.php',
             __( 'Obsługa PIT', 'obsluga-pit' ),
-            __( 'Obsługa PIT', 'obsluga-pit' ),
+            __( 'Ustawienia', 'obsluga-pit' ),
             'manage_options',
             'obsluga-pit-settings',
             [ $this, 'render_settings' ]
+        );
+        add_submenu_page(
+            'tools.php',
+            __( 'Wgrane PIT-y', 'obsluga-pit' ),
+            __( 'Wgrane PIT-y', 'obsluga-pit' ),
+            'manage_options',
+            'obsluga-pit',
+            [ $this, 'render_dashboard' ]
         );
     }
 
@@ -76,6 +87,9 @@ class PIT_Admin {
         ] );
         register_setting( 'pit_options_group', 'pit_company_nip', [
             'sanitize_callback' => [ $this, 'sanitize_nip' ],
+        ] );
+        register_setting( 'pit_options_group', 'pit_filename_filters', [
+            'sanitize_callback' => [ $this, 'sanitize_filename_filters' ],
         ] );
 
         add_settings_section(
@@ -158,6 +172,54 @@ class PIT_Admin {
                 'description' => __( 'Wybierz użytkownika i kliknij "Zapisz zmiany", aby dodać go do listy księgowych.', 'obsluga-pit' )
             ]
         );
+
+        add_settings_field(
+            'pit_filename_filters',
+            __( 'Format nazwy pliku', 'obsluga-pit' ),
+            [ $this, 'render_field_filename_filters' ],
+            'obsluga-pit-settings',
+            'pit_main_settings',
+            [
+                'name'        => 'pit_filename_filters',
+                'description' => __( 'Lista rekordów (jeden w każdej linii). Każdy rekord to filtr w formacie: Segment1*Segment2*Segment3, np. Nazwisko Imię*PIT-11*NNNN lub Informacja roczna*Nazwisko Imię. Segmenty: Nazwisko Imię, PIT-11 / Informacja roczna (tytuł dokumentu), NNNN (rok), opcjonalnie PESEL.', 'obsluga-pit' ),
+            ]
+        );
+    }
+
+    public function sanitize_filename_filters( $input ): array {
+        if ( is_array( $input ) ) {
+            $lines = $input;
+        } elseif ( is_string( $input ) ) {
+            $lines = preg_split( '/\r\n|\r|\n/', $input );
+        } else {
+            $lines = [];
+        }
+        $out = [];
+        foreach ( $lines as $line ) {
+            $s = sanitize_text_field( is_string( $line ) ? $line : '' );
+            $s = trim( $s );
+            if ( $s !== '' ) {
+                $out[] = $s;
+            }
+        }
+        return array_values( $out );
+    }
+
+    public function render_field_filename_filters( array $args ): void {
+        $name  = $args['name'];
+        $value = get_option( $name, [] );
+        if ( ! is_array( $value ) ) {
+            $value = [];
+        }
+        $text = implode( "\n", $value );
+        printf(
+            '<textarea name="%s" rows="6" class="large-text code" placeholder="Nazwisko Imię*PIT-11*NNNN">%s</textarea>',
+            esc_attr( $name ),
+            esc_textarea( $text )
+        );
+        if ( ! empty( $args['description'] ) ) {
+            printf( '<p class="description">%s</p>', esc_html( $args['description'] ) );
+        }
     }
 
     public function render_field_text( array $args ): void {
@@ -373,6 +435,13 @@ class PIT_Admin {
         <div class="wrap obsluga-pit-wrap">
             <h1><?php esc_html_e( 'Wgrane PIT-y', 'obsluga-pit' ); ?></h1>
 
+            <?php if ( isset( $_GET['pit_set_pesel_ok'] ) && $_GET['pit_set_pesel_ok'] === '1' ) : ?>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'PESEL został zapisany.', 'obsluga-pit' ); ?></p></div>
+            <?php endif; ?>
+            <?php if ( isset( $_GET['pit_set_pesel_error'] ) && $_GET['pit_set_pesel_error'] === '1' ) : ?>
+                <div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'obsluga-pit' ); ?></p></div>
+            <?php endif; ?>
+
             <?php if ( ! empty( $years ) ) : ?>
             <div class="tablenav top">
                 <div class="alignleft actions">
@@ -416,7 +485,25 @@ class PIT_Admin {
                             <tr class="<?php echo $is_downloaded ? '' : 'pit-not-downloaded'; ?>">
                                 <td><?php echo $i++; ?></td>
                                 <td><?php echo esc_html( $file->full_name ); ?></td>
-                                <td><?php echo esc_html( $file->pesel ); ?></td>
+                                <td>
+                                    <?php
+                                    $pesel_empty = ( $file->pesel === '' || $file->pesel === null );
+                                    if ( $pesel_empty ) :
+                                        ?>
+                                        <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+                                            <input type="hidden" name="action" value="pit_set_pesel">
+                                            <?php wp_nonce_field( 'pit_set_pesel', 'pit_set_pesel_nonce' ); ?>
+                                            <input type="hidden" name="pit_set_pesel_full_name" value="<?php echo esc_attr( $file->full_name ); ?>">
+                                            <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Brak PESEL', 'obsluga-pit' ); ?></a>
+                                            <span class="pit-set-pesel-form" style="display:none;">
+                                                <input type="text" name="pit_set_pesel_value" placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-pit' ); ?>" maxlength="11" pattern="\d{11}" size="11" style="width:100px;">
+                                                <button type="submit" class="button button-small"><?php esc_html_e( 'Zapisz', 'obsluga-pit' ); ?></button>
+                                            </span>
+                                        </form>
+                                    <?php else : ?>
+                                        <?php echo esc_html( $file->pesel ); ?>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?php echo esc_html( $file->tax_year ); ?></td>
                                 <td><?php echo esc_html( $file->uploaded_at ); ?></td>
                                 <td>
@@ -494,6 +581,21 @@ class PIT_Admin {
                 </div>
             <?php endif; ?>
             
+            <?php if ( isset( $_GET['pit_import_updated'] ) || isset( $_GET['pit_import_skipped'] ) ) : ?>
+                <div class="notice notice-success is-dismissible">
+                    <p>
+                        <?php
+                        if ( isset( $_GET['pit_import_updated'] ) && (int) $_GET['pit_import_updated'] > 0 ) {
+                            echo esc_html( sprintf( __( 'Zaktualizowano PESEL dla %d osób.', 'obsluga-pit' ), (int) $_GET['pit_import_updated'] ) );
+                        }
+                        if ( isset( $_GET['pit_import_skipped'] ) && (int) $_GET['pit_import_skipped'] > 0 ) {
+                            echo ' ' . esc_html( sprintf( __( 'Pominięto %d wierszy (błędny format lub brak dopasowania w bazie).', 'obsluga-pit' ), (int) $_GET['pit_import_skipped'] ) );
+                        }
+                        ?>
+                    </p>
+                </div>
+            <?php endif; ?>
+
             <form method="post" action="options.php">
                 <?php
                 settings_fields( 'pit_options_group' );
@@ -501,8 +603,104 @@ class PIT_Admin {
                 submit_button();
                 ?>
             </form>
+
+            <hr style="margin: 25px 0;">
+            <h2><?php esc_html_e( 'Import listy PESEL', 'obsluga-pit' ); ?></h2>
+            <p class="description">
+                <?php esc_html_e( 'Plik .txt: w każdym wierszu jedna osoba w formacie: Imię Nazwisko PESEL (PESEL – 11 cyfr). Po wczytaniu program dopasuje PESEL do osób i dokumentów w bazie po imieniu i nazwisku.', 'obsluga-pit' ); ?>
+            </p>
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" style="margin-top: 10px;">
+                <input type="hidden" name="action" value="pit_import_pesel_list">
+                <?php wp_nonce_field( 'pit_import_pesel_list', 'pit_import_pesel_nonce' ); ?>
+                <input type="file" name="pit_pesel_list_file" accept=".txt" required>
+                <button type="submit" class="button button-secondary"><?php esc_html_e( 'Wczytaj i dopasuj', 'obsluga-pit' ); ?></button>
+            </form>
         </div>
         <?php
+    }
+
+    /**
+     * Obsługuje import listy PESEL z pliku .txt (Imię Nazwisko PESEL w każdym wierszu).
+     */
+    public function handle_import_pesel_list(): void {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_import_pesel_nonce'] ?? '', 'pit_import_pesel_list' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+        }
+
+        if ( empty( $_FILES['pit_pesel_list_file']['tmp_name'] ) || ! is_uploaded_file( $_FILES['pit_pesel_list_file']['tmp_name'] ) ) {
+            wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&pit_import_skipped=0&pit_import_updated=0' ) );
+            exit;
+        }
+
+        $content = file_get_contents( $_FILES['pit_pesel_list_file']['tmp_name'] );
+        if ( $content === false ) {
+            wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&pit_import_error=1' ) );
+            exit;
+        }
+
+        $lines   = preg_split( '/\r\n|\r|\n/', $content );
+        $updated = 0;
+        $skipped = 0;
+        $db      = PIT_Database::get_instance();
+
+        foreach ( $lines as $line ) {
+            $line = trim( $line );
+            if ( $line === '' ) {
+                continue;
+            }
+            if ( ! preg_match( '/\b(\d{11})\b/', $line, $m ) ) {
+                $skipped++;
+                continue;
+            }
+            $pesel     = $m[1];
+            $full_name = trim( preg_replace( '/\b\d{11}\b/', '', $line ) );
+            $full_name = pit_normalize_full_name( $full_name );
+            if ( $full_name === '' ) {
+                $skipped++;
+                continue;
+            }
+            $count = $db->update_pesel_for_person( $full_name, $pesel );
+            if ( $count > 0 ) {
+                $updated++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        wp_redirect( admin_url( 'admin.php?page=obsluga-pit-settings&pit_import_updated=' . $updated . '&pit_import_skipped=' . $skipped ) );
+        exit;
+    }
+
+    /**
+     * Obsługuje ręczne ustawienie PESEL dla osoby (link „Brak PESEL” na liście).
+     */
+    public function handle_set_pesel(): void {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_set_pesel_nonce'] ?? '', 'pit_set_pesel' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+        }
+
+        $full_name = sanitize_text_field( $_POST['pit_set_pesel_full_name'] ?? '' );
+        $pesel     = sanitize_text_field( $_POST['pit_set_pesel_value'] ?? '' );
+        $pesel     = preg_replace( '/\D/', '', $pesel );
+
+        if ( $full_name === '' || strlen( $pesel ) !== 11 ) {
+            wp_redirect( admin_url( 'admin.php?page=obsluga-pit&pit_set_pesel_error=1' ) );
+            exit;
+        }
+
+        $db = PIT_Database::get_instance();
+        $db->update_pesel_for_person( $full_name, $pesel );
+
+        wp_redirect( admin_url( 'admin.php?page=obsluga-pit&pit_set_pesel_ok=1' ) );
+        exit;
     }
 
     /**

@@ -11,6 +11,7 @@
         initAdminFilters();
         initTableSorting();
         initBulkActions();
+        initBrakPeselLink();
     });
 
     /**
@@ -209,6 +210,22 @@
                 $bulkActions.hide();
             }
         }
+    }
+
+    /**
+     * Klik w "Brak PESEL" pokazuje formularz uzupełnienia PESEL.
+     */
+    function initBrakPeselLink() {
+        $(document).on('click', '.pit-brak-pesel-link', function(e) {
+            e.preventDefault();
+            var $link = $(this);
+            var $form = $link.siblings('.pit-set-pesel-form');
+            if ($form.length) {
+                $link.hide();
+                $form.show();
+                $form.find('input[type="text"]').focus();
+            }
+        });
     }
 
 })(jQuery);

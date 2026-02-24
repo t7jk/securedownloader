@@ -54,6 +54,7 @@ delete_option( 'pit_client_page_url' );
 delete_option( 'pit_company_name' );
 delete_option( 'pit_company_address' );
 delete_option( 'pit_company_nip' );
+delete_option( 'pit_filename_filters' );
 delete_option( 'pit_version' );
 
 $admin = get_role( 'administrator' );

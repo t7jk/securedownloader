@@ -60,6 +60,12 @@ function pit_activate_plugin(): void {
     if ( get_option( 'pit_client_page_url' ) === false ) {
         add_option( 'pit_client_page_url', home_url( '/podatnik' ) );
     }
+    if ( get_option( 'pit_filename_filters' ) === false ) {
+        add_option( 'pit_filename_filters', [
+            'Nazwisko Imię*PIT-11*NNNN',
+            'Informacja roczna*Nazwisko Imię',
+        ] );
+    }
 
     // Zapisz wersję wtyczki
     update_option( 'pit_version', PIT_VERSION );
@@ -70,6 +76,17 @@ function pit_activate_plugin(): void {
  */
 function pit_get_upload_dir(): string {
     return PIT_PLUGIN_DIR . 'uploads/';
+}
+
+/**
+ * Normalizuje imię i nazwisko do porównań (trim, pojedyncze spacje).
+ *
+ * @param string $full_name Imię i nazwisko.
+ * @return string Znormalizowana postać.
+ */
+function pit_normalize_full_name( string $full_name ): string {
+    $s = trim( preg_replace( '/\s+/', ' ', $full_name ) );
+    return $s;
 }
 
 /**

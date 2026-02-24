@@ -26,6 +26,8 @@ class PIT_Accountant {
         add_action( 'admin_post_nopriv_pit_generate_report_pdf', [ $this, 'handle_generate_report_pdf' ] );
         add_action( 'admin_post_pit_bulk_delete_files', [ $this, 'handle_bulk_delete' ] );
         add_action( 'admin_post_nopriv_pit_bulk_delete_files', [ $this, 'handle_bulk_delete' ] );
+        add_action( 'admin_post_pit_set_pesel_front', [ $this, 'handle_set_pesel_front' ] );
+        add_action( 'admin_post_nopriv_pit_set_pesel_front', [ $this, 'handle_set_pesel_front' ] );
     }
 
     /**
@@ -74,6 +76,107 @@ class PIT_Accountant {
         }
 
         $full_name = $parts[3] . ' ' . $parts[4];
+
+        return [
+            'tax_year'  => $tax_year,
+            'full_name' => $full_name,
+            'pesel'     => $pesel,
+        ];
+    }
+
+    /**
+     * Parsuje nazwę pliku wg listy filtrów (segmenty rozdzielone *).
+     * Np. "Nazwisko Imię*PIT-11*NNNN" → full_name, tytuł dokumentu, rok.
+     *
+     * @param string   $filename Nazwa pliku (np. Zalewska Natalia - PIT-11 (29) - rok 2025.pdf).
+     * @param string[] $filters  Lista rekordów filtrów.
+     * @return array|false Tablica full_name, tax_year, pesel (pusty gdy brak) lub false.
+     */
+    public function parse_filename_by_filters( string $filename, array $filters ): array|false {
+        $base = pathinfo( $filename, PATHINFO_FILENAME );
+        if ( $base === '' ) {
+            return false;
+        }
+
+        $current_year = (int) date( 'Y' );
+        $tax_year     = null;
+        if ( preg_match( '/\b(19|20)\d{2}\b/', $base, $ym ) ) {
+            $y = (int) $ym[0];
+            if ( $y >= 2000 && $y <= $current_year + 1 ) {
+                $tax_year = $y;
+            }
+        }
+        if ( $tax_year === null ) {
+            $tax_year = $current_year - 1;
+        }
+
+        $pesel = '';
+        if ( preg_match( '/\b(\d{11})\b/', $base, $pm ) ) {
+            $pesel = $pm[1];
+        }
+
+        $doc_found = false;
+        if ( stripos( $base, 'PIT-11' ) !== false ) {
+            $doc_found = true;
+        }
+        if ( stripos( $base, 'Informacja roczna' ) !== false ) {
+            $doc_found = true;
+        }
+
+        $name_base = $base;
+        $name_base = preg_replace( '/\b(19|20)\d{2}\b/', '', $name_base );
+        $name_base = preg_replace( '/\b\d{11}\b/', '', $name_base );
+        $name_base = preg_replace( '/PIT-11/i', '', $name_base );
+        $name_base = preg_replace( '/Informacja\s+roczna/i', '', $name_base );
+        $name_base = preg_replace( '/[-\s()]+/', ' ', $name_base );
+        $name_base = preg_replace( '/\brok\b/i', '', $name_base );
+        $full_name = pit_normalize_full_name( $name_base );
+
+        foreach ( $filters as $filter_str ) {
+            $filter_str = trim( (string) $filter_str );
+            if ( $filter_str === '' ) {
+                continue;
+            }
+            $segments = array_map( 'trim', explode( '*', $filter_str ) );
+            $needs_pesel = false;
+            $needs_doc   = false;
+            $needs_name  = false;
+            foreach ( $segments as $seg ) {
+                if ( stripos( $seg, 'PESEL' ) !== false ) {
+                    $needs_pesel = true;
+                }
+                if ( stripos( $seg, 'PIT-11' ) !== false || stripos( $seg, 'Informacja' ) !== false ) {
+                    $needs_doc = true;
+                }
+                if ( stripos( $seg, 'Nazwisko' ) !== false || stripos( $seg, 'Imię' ) !== false ) {
+                    $needs_name = true;
+                }
+            }
+            if ( $needs_pesel && $pesel === '' ) {
+                continue;
+            }
+            if ( $needs_doc && ! $doc_found ) {
+                continue;
+            }
+            if ( $needs_name && $full_name === '' ) {
+                return false;
+            }
+            if ( $needs_doc && ! $doc_found ) {
+                return false;
+            }
+            return [
+                'tax_year'  => $tax_year,
+                'full_name' => $full_name !== '' ? $full_name : 'Nieznany',
+                'pesel'     => $pesel,
+            ];
+        }
+
+        if ( $full_name === '' ) {
+            return false;
+        }
+        if ( ! $doc_found ) {
+            return false;
+        }
 
         return [
             'tax_year'  => $tax_year,
@@ -157,7 +260,8 @@ class PIT_Accountant {
             return '<p class="pit-error">' . esc_html__( 'Brak dostępu do tego panelu.', 'obsluga-pit' ) . '</p>';
         }
 
-        $message = '';
+        $message       = '';
+        $message_class = 'pit-success';
         if ( isset( $_GET['pit_uploaded'] ) ) {
             $uploaded = (int) $_GET['pit_uploaded'];
             $errors   = (int) $_GET['pit_errors'];
@@ -183,6 +287,13 @@ class PIT_Accountant {
                 $count
             );
         }
+        if ( isset( $_GET['pit_set_pesel_ok'] ) && $_GET['pit_set_pesel_ok'] === '1' ) {
+            $message = __( 'PESEL został zapisany.', 'obsluga-pit' );
+        }
+        if ( isset( $_GET['pit_set_pesel_error'] ) && $_GET['pit_set_pesel_error'] === '1' ) {
+            $message       = __( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'obsluga-pit' );
+            $message_class = 'pit-error';
+        }
 
         $db     = PIT_Database::get_instance();
         $files  = $db->get_all_files_sorted();
@@ -194,14 +305,24 @@ class PIT_Accountant {
             <h2><?php esc_html_e( 'Panel Księgowego – PIT-11', 'obsluga-pit' ); ?></h2>
 
             <?php if ( $message ) : ?>
-                <div class="pit-message pit-success">
+                <div class="pit-message <?php echo esc_attr( $message_class ); ?>">
                     <?php echo esc_html( $message ); ?>
                 </div>
             <?php endif; ?>
 
             <h3><?php esc_html_e( 'Wgraj pliki PIT-11', 'obsluga-pit' ); ?></h3>
             <p class="description">
-                <?php esc_html_e( 'Format nazwy pliku:', 'obsluga-pit' ); ?> <strong>PIT-11_rok_YYYY_Nazwisko_Imię_PESEL.pdf</strong><br>
+                <?php
+                $filters = get_option( 'pit_filename_filters', [] );
+                if ( ! empty( $filters ) && is_array( $filters ) ) {
+                    esc_html_e( 'Format nazwy pliku (aktywne filtry z Ustawień):', 'obsluga-pit' );
+                    echo ' <strong>' . esc_html( implode( '; ', array_slice( $filters, 0, 2 ) ) ) . '</strong>';
+                } else {
+                    esc_html_e( 'Format nazwy pliku:', 'obsluga-pit' );
+                    echo ' <strong>PIT-11_rok_YYYY_Nazwisko_Imię_PESEL.pdf</strong>';
+                }
+                ?>
+                <br>
                 <?php esc_html_e( 'Możesz wgrać 1 lub więcej plików jednocześnie.', 'obsluga-pit' ); ?>
             </p>
 
@@ -252,7 +373,26 @@ class PIT_Accountant {
                                     <td><input type="checkbox" name="pit_delete_ids[]" value="<?php echo esc_attr( $file->id ); ?>" class="pit-checkbox"></td>
                                     <td class="pit-lp"><?php echo $i++; ?></td>
                                     <td data-name="<?php echo esc_attr( $file->full_name ); ?>"><?php echo esc_html( $file->full_name ); ?></td>
-                                    <td data-pesel="<?php echo esc_attr( $file->pesel ); ?>"><?php echo esc_html( substr( $file->pesel, 0, 4 ) . '....' . substr( $file->pesel, 8, 3 ) ); ?></td>
+                                    <td data-pesel="<?php echo esc_attr( $file->pesel ?? '' ); ?>">
+                                        <?php
+                                        $pesel_empty = ( $file->pesel === '' || $file->pesel === null );
+                                        if ( $pesel_empty ) :
+                                            $set_pesel_url = admin_url( 'admin-post.php' );
+                                            ?>
+                                            <form method="post" action="<?php echo esc_url( $set_pesel_url ); ?>" class="pit-inline-pesel-form" style="display:inline;">
+                                                <input type="hidden" name="action" value="pit_set_pesel_front">
+                                                <?php wp_nonce_field( 'pit_set_pesel_front', 'pit_set_pesel_front_nonce' ); ?>
+                                                <input type="hidden" name="pit_set_pesel_full_name" value="<?php echo esc_attr( $file->full_name ); ?>">
+                                                <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Brak PESEL', 'obsluga-pit' ); ?></a>
+                                                <span class="pit-set-pesel-form" style="display:none;">
+                                                    <input type="text" name="pit_set_pesel_value" placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-pit' ); ?>" maxlength="11" pattern="\d{11}" size="11">
+                                                    <button type="submit" class="button button-small"><?php esc_html_e( 'Zapisz', 'obsluga-pit' ); ?></button>
+                                                </span>
+                                            </form>
+                                        <?php else : ?>
+                                            <?php echo esc_html( substr( (string) $file->pesel, 0, 4 ) . '....' . substr( (string) $file->pesel, 8, 3 ) ); ?>
+                                        <?php endif; ?>
+                                    </td>
                                     <td data-year="<?php echo esc_attr( $file->tax_year ); ?>"><?php echo esc_html( $file->tax_year ); ?></td>
                                     <td data-date="<?php echo $is_downloaded ? esc_attr( $file->last_download ) : ''; ?>">
                                         <?php 
@@ -327,9 +467,12 @@ class PIT_Accountant {
 
         require_once ABSPATH . 'wp-admin/includes/file.php';
 
-        $uploaded = 0;
-        $errors   = 0;
-        $db       = PIT_Database::get_instance();
+        $uploaded   = 0;
+        $errors     = 0;
+        $skipped    = 0;
+        $db         = PIT_Database::get_instance();
+        $filters    = get_option( 'pit_filename_filters', [] );
+        $inserted_ids = [];
 
         $files = $_FILES['pit_pdfs'];
         $count = count( $files['name'] );
@@ -349,7 +492,13 @@ class PIT_Accountant {
                 continue;
             }
 
-            $parsed = $this->parse_filename( $name );
+            $parsed = null;
+            if ( ! empty( $filters ) && is_array( $filters ) ) {
+                $parsed = $this->parse_filename_by_filters( $name, $filters );
+            }
+            if ( $parsed === false ) {
+                $parsed = $this->parse_filename( $name );
+            }
             if ( ! $parsed ) {
                 $errors++;
                 continue;
@@ -362,7 +511,7 @@ class PIT_Accountant {
                 wp_mkdir_p( $target_dir );
             }
 
-            $safe_name = sanitize_file_name( $name );
+            $safe_name   = sanitize_file_name( $name );
             $target_path = $target_dir . $safe_name;
 
             if ( ! move_uploaded_file( $tmp_name, $target_path ) ) {
@@ -374,7 +523,7 @@ class PIT_Accountant {
 
             $result = $db->insert_file( [
                 'full_name' => $parsed['full_name'],
-                'pesel'     => $parsed['pesel'],
+                'pesel'     => $parsed['pesel'] ?? '',
                 'tax_year'  => $parsed['tax_year'],
                 'file_path' => $target_path,
                 'file_url'  => $file_url,
@@ -382,6 +531,7 @@ class PIT_Accountant {
 
             if ( $result ) {
                 $uploaded++;
+                $inserted_ids[] = $result;
             } else {
                 $errors++;
                 if ( file_exists( $target_path ) ) {
@@ -390,13 +540,181 @@ class PIT_Accountant {
             }
         }
 
+        if ( $uploaded > 0 ) {
+            $this->maybe_pack_zip_for_same_person_year( $db );
+            $this->fill_missing_pesel_after_upload( $db );
+        }
+
         $redirect = add_query_arg( [
             'pit_uploaded' => $uploaded,
             'pit_errors'   => $errors,
+            'pit_skipped'  => $skipped,
         ], wp_get_referer() ?: home_url() );
 
         wp_redirect( esc_url_raw( $redirect ) );
         exit;
+    }
+
+    /**
+     * Dla każdej pary (tax_year, full_name) z więcej niż jednym plikiem pakuje pliki do ZIP.
+     */
+    private function maybe_pack_zip_for_same_person_year( PIT_Database $db ): void {
+        global $wpdb;
+
+        $table = PIT_Database::$table_files;
+        $rows  = $wpdb->get_results(
+            "SELECT tax_year, full_name, COUNT(*) as cnt FROM {$table} GROUP BY tax_year, full_name HAVING cnt > 1",
+            ARRAY_A
+        );
+
+        if ( empty( $rows ) ) {
+            return;
+        }
+
+        $upload_dir = wp_upload_dir();
+        $base_dir   = $upload_dir['basedir'] . '/obsluga-pit/';
+        $base_url   = $upload_dir['baseurl'] . '/obsluga-pit/';
+
+        foreach ( $rows as $row ) {
+            $tax_year  = (int) $row['tax_year'];
+            $full_name = $row['full_name'];
+            $files     = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT id, file_path, pesel FROM {$table} WHERE tax_year = %d AND full_name = %s ORDER BY id ASC",
+                    $tax_year,
+                    $full_name
+                )
+            );
+
+            $pdf_files = array_filter( $files, function ( $f ) {
+                return str_ends_with( strtolower( $f->file_path ), '.pdf' );
+            } );
+            if ( count( $pdf_files ) < 2 ) {
+                continue;
+            }
+
+            $zip_name = sanitize_file_name( $full_name . ' ' . $tax_year . '.zip' );
+            $zip_path = $base_dir . $tax_year . '/' . $zip_name;
+
+            if ( ! class_exists( 'ZipArchive' ) ) {
+                continue;
+            }
+
+            $zip = new ZipArchive();
+            if ( $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) !== true ) {
+                continue;
+            }
+
+            $first_pesel = '';
+            foreach ( $pdf_files as $file ) {
+                if ( file_exists( $file->file_path ) ) {
+                    $zip->addFile( $file->file_path, basename( $file->file_path ) );
+                }
+                if ( ! empty( $file->pesel ) ) {
+                    $first_pesel = $file->pesel;
+                }
+            }
+            $zip->close();
+
+            $zip_url = $base_url . $tax_year . '/' . $zip_name;
+
+            $db->insert_file( [
+                'full_name' => $full_name,
+                'pesel'     => $first_pesel,
+                'tax_year'  => $tax_year,
+                'file_path' => $zip_path,
+                'file_url'  => $zip_url,
+            ] );
+
+            foreach ( $pdf_files as $file ) {
+                if ( file_exists( $file->file_path ) ) {
+                    unlink( $file->file_path );
+                }
+                $db->delete_file( (int) $file->id );
+            }
+        }
+    }
+
+    /**
+     * Uzupełnia brakujący PESEL: najpierw z bazy (inna pozycja tej osoby), potem z treści PDF.
+     * Gdy w PDF jest więcej niż jeden różny PESEL – nie przypisuje, zgłasza błąd.
+     */
+    private function fill_missing_pesel_after_upload( PIT_Database $db ): void {
+        $persons = $db->get_person_ids_with_empty_pesel();
+        foreach ( $persons as $full_name ) {
+            $pesel = $db->get_pesel_by_full_name( $full_name );
+            if ( $pesel !== null ) {
+                $db->update_pesel_for_person( $full_name, $pesel );
+                continue;
+            }
+            $pesel = $this->extract_pesel_from_person_pdfs( $full_name, $db );
+            if ( $pesel !== null ) {
+                $db->update_pesel_for_person( $full_name, $pesel );
+            }
+        }
+    }
+
+    /**
+     * Próbuje wyciągnąć jeden PESEL z plików PDF danej osoby. Gdy wiele różnych – zwraca null.
+     *
+     * @param string       $full_name full_name osoby.
+     * @param PIT_Database $db        Instancja bazy.
+     * @return string|null PESEL lub null.
+     */
+    private function extract_pesel_from_person_pdfs( string $full_name, PIT_Database $db ): ?string {
+        global $wpdb;
+
+        $table = PIT_Database::$table_files;
+        $rows  = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, file_path FROM {$table} WHERE full_name = %s AND (pesel IS NULL OR pesel = '') ORDER BY id ASC",
+                $full_name
+            )
+        );
+
+        $found_pesels = [];
+        foreach ( $rows as $row ) {
+            if ( ! file_exists( $row->file_path ) ) {
+                continue;
+            }
+            $text = $this->extract_text_from_pdf( $row->file_path );
+            if ( $text === '' ) {
+                continue;
+            }
+            if ( preg_match_all( '/\b(\d{11})\b/', $text, $m ) ) {
+                foreach ( $m[1] as $p ) {
+                    $found_pesels[ $p ] = true;
+                }
+            }
+        }
+
+        $unique = array_keys( $found_pesels );
+        if ( count( $unique ) === 1 ) {
+            return $unique[0];
+        }
+        if ( count( $unique ) > 1 ) {
+            return null;
+        }
+        return null;
+    }
+
+    /**
+     * Wyciąga tekst z pliku PDF (jeśli dostępne narzędzie).
+     *
+     * @param string $file_path Ścieżka do PDF.
+     * @return string Tekst lub pusty.
+     */
+    private function extract_text_from_pdf( string $file_path ): string {
+        if ( ! file_exists( $file_path ) ) {
+            return '';
+        }
+        $path = escapeshellarg( $file_path );
+        $cmd = "pdftotext -layout {$path} - 2>/dev/null";
+        if ( function_exists( 'shell_exec' ) && ! ini_get( 'safe_mode' ) ) {
+            $out = @shell_exec( $cmd );
+            return is_string( $out ) ? $out : '';
+        }
+        return '';
     }
 
     /**
@@ -449,6 +767,36 @@ class PIT_Accountant {
         }
 
         $redirect = add_query_arg( 'pit_bulk_deleted', $count, wp_get_referer() ?: home_url() );
+        wp_redirect( esc_url_raw( $redirect ) );
+        exit;
+    }
+
+    /**
+     * Obsługuje ręczne ustawienie PESEL z panelu księgowego (link „Brak PESEL”).
+     */
+    public function handle_set_pesel_front(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_set_pesel_front_nonce'] ?? '', 'pit_set_pesel_front' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+        }
+
+        $full_name = sanitize_text_field( $_POST['pit_set_pesel_full_name'] ?? '' );
+        $pesel     = sanitize_text_field( $_POST['pit_set_pesel_value'] ?? '' );
+        $pesel     = preg_replace( '/\D/', '', $pesel );
+
+        if ( $full_name === '' || strlen( $pesel ) !== 11 ) {
+            $redirect = add_query_arg( 'pit_set_pesel_error', '1', wp_get_referer() ?: home_url() );
+            wp_redirect( esc_url_raw( $redirect ) );
+            exit;
+        }
+
+        $db = PIT_Database::get_instance();
+        $db->update_pesel_for_person( $full_name, $pesel );
+
+        $redirect = add_query_arg( 'pit_set_pesel_ok', '1', wp_get_referer() ?: home_url() );
         wp_redirect( esc_url_raw( $redirect ) );
         exit;
     }

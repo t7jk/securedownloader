@@ -47,11 +47,12 @@ class PIT_Database {
 		$table_downloads = self::$table_downloads;
 
 		self::maybe_migrate_to_full_name();
+		self::maybe_migrate_pesel_nullable();
 
 		$sql_files = "CREATE TABLE IF NOT EXISTS {$table_files} (
 			id            INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 			full_name     VARCHAR(200)     NOT NULL,
-			pesel         VARCHAR(11)      NOT NULL,
+			pesel         VARCHAR(11)      NULL DEFAULT '',
 			tax_year      YEAR             NOT NULL,
 			file_path     VARCHAR(500)     NOT NULL,
 			file_url      VARCHAR(500)     NOT NULL,
@@ -110,6 +111,84 @@ class PIT_Database {
 	}
 
 	/**
+	 * Migruje kolumnę pesel na NULL (dla formatów bez PESEL w nazwie pliku).
+	 */
+	private static function maybe_migrate_pesel_nullable(): void {
+		global $wpdb;
+
+		$table = self::$table_files;
+
+		$column = $wpdb->get_row(
+			"SHOW COLUMNS FROM {$table} LIKE 'pesel'"
+		);
+
+		if ( $column && strtoupper( (string) $column->Null ) === 'NO' ) {
+			$wpdb->query(
+				"ALTER TABLE {$table} MODIFY COLUMN pesel VARCHAR(11) NULL DEFAULT ''"
+			);
+		}
+	}
+
+	/**
+	 * Zwraca PESEL pierwszej osoby o danym full_name (gdy wypełniony).
+	 *
+	 * @param string $full_name Imię i nazwisko (znormalizowane).
+	 * @return string|null      PESEL lub null.
+	 */
+	public function get_pesel_by_full_name( string $full_name ): ?string {
+		global $wpdb;
+
+		$normalized = pit_normalize_full_name( $full_name );
+		$pesel      = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT pesel FROM %i WHERE full_name = %s AND pesel IS NOT NULL AND pesel != '' LIMIT 1",
+				self::$table_files,
+				$normalized
+			)
+		);
+
+		return is_string( $pesel ) && $pesel !== '' ? $pesel : null;
+	}
+
+	/**
+	 * Ustawia PESEL dla wszystkich rekordów danej osoby (full_name).
+	 *
+	 * @param string $full_name Imię i nazwisko (znormalizowane).
+	 * @param string $pesel     PESEL (11 cyfr).
+	 * @return int              Liczba zaktualizowanych wierszy.
+	 */
+	public function update_pesel_for_person( string $full_name, string $pesel ): int {
+		global $wpdb;
+
+		$normalized = pit_normalize_full_name( $full_name );
+		$pesel      = preg_replace( '/\D/', '', $pesel );
+		$pesel      = substr( $pesel, 0, 11 );
+
+		return (int) $wpdb->update(
+			self::$table_files,
+			[ 'pesel' => $pesel ],
+			[ 'full_name' => $normalized ],
+			[ '%s' ],
+			[ '%s' ]
+		);
+	}
+
+	/**
+	 * Zwraca listę distinct full_name mających co najmniej jeden rekord z pustym PESEL.
+	 *
+	 * @return array<string> Tablica full_name.
+	 */
+	public function get_person_ids_with_empty_pesel(): array {
+		global $wpdb;
+
+		$names = $wpdb->get_col(
+			"SELECT DISTINCT full_name FROM " . self::$table_files . " WHERE (pesel IS NULL OR pesel = '') ORDER BY full_name ASC"
+		);
+
+		return is_array( $names ) ? array_map( 'strval', $names ) : [];
+	}
+
+	/**
 	 * Wywoływana podczas aktywacji wtyczki.
 	 */
 	public static function activate(): void {
@@ -132,11 +211,14 @@ class PIT_Database {
 	public function insert_file( array $data ): int|false {
 		global $wpdb;
 
+		$full_name = pit_normalize_full_name( sanitize_text_field( $data['full_name'] ?? '' ) );
+		$pesel_val = sanitize_text_field( $data['pesel'] ?? '' );
+
 		$result = $wpdb->insert(
 			self::$table_files,
 			[
-				'full_name'   => sanitize_text_field( $data['full_name'] ?? '' ),
-				'pesel'       => sanitize_text_field( $data['pesel'] ?? '' ),
+				'full_name'   => $full_name,
+				'pesel'       => $pesel_val,
 				'tax_year'    => (int) ( $data['tax_year'] ?? 0 ),
 				'file_path'   => $data['file_path'] ?? '',
 				'file_url'    => $data['file_url'] ?? '',
