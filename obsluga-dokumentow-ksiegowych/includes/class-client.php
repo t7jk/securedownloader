@@ -44,26 +44,26 @@ class PIT_Client {
 
         if ( $post && has_shortcode( $post->post_content, 'pit_client_page' ) ) {
             wp_enqueue_style(
-                'obsluga-pit-style',
+                'obsluga-dokumentow-ksiegowych-style',
                 PIT_PLUGIN_URL . 'assets/style.css',
                 [],
                 PIT_VERSION
             );
 
             wp_enqueue_script(
-                'obsluga-pit-script',
+                'obsluga-dokumentow-ksiegowych-script',
                 PIT_PLUGIN_URL . 'assets/script.js',
                 [ 'jquery' ],
                 PIT_VERSION,
                 true
             );
 
-            wp_localize_script( 'obsluga-pit-script', 'pitManager', [
+            wp_localize_script( 'obsluga-dokumentow-ksiegowych-script', 'pitManager', [
                 'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
                 'nonce'        => wp_create_nonce( 'pit_manager_nonce' ),
-                'errorPesel'   => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-pit' ),
-                'errorName'    => __( 'Imię i nazwisko są wymagane.', 'obsluga-pit' ),
-                'errorConfirm' => __( 'Musisz potwierdzić otrzymanie dokumentu.', 'obsluga-pit' ),
+                'errorPesel'   => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
+                'errorName'    => __( 'Imię i nazwisko są wymagane.', 'obsluga-dokumentow-ksiegowych' ),
+                'errorConfirm' => __( 'Musisz potwierdzić otrzymanie dokumentu.', 'obsluga-dokumentow-ksiegowych' ),
             ] );
         }
     }
@@ -89,14 +89,14 @@ class PIT_Client {
         $success = '';
 
         if ( isset( $_GET['pit_error'] ) ) {
-            $error = __( 'Nie znaleziono dokumentu. Sprawdź poprawność identyfikacji.', 'obsluga-pit' );
+            $error = __( 'Nie znaleziono dokumentu. Sprawdź poprawność identyfikacji.', 'obsluga-dokumentow-ksiegowych' );
         }
 
         ob_start();
 
         ?>
         <div class="pit-client-page">
-            <h2><?php esc_html_e( 'Pobierz swój PIT-11', 'obsluga-pit' ); ?></h2>
+            <h2><?php esc_html_e( 'Pobierz swój PIT-11', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
 
             <?php if ( $company_name || $company_address || $company_nip ) : ?>
                 <div class="pit-company-info">
@@ -107,7 +107,7 @@ class PIT_Client {
                         <p><?php echo esc_html( $company_address ); ?></p>
                     <?php endif; ?>
                     <?php if ( $company_nip ) : ?>
-                        <p><?php esc_html_e( 'NIP:', 'obsluga-pit' ); ?> <?php echo esc_html( $company_nip ); ?></p>
+                        <p><?php esc_html_e( 'NIP:', 'obsluga-dokumentow-ksiegowych' ); ?> <?php echo esc_html( $company_nip ); ?></p>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -122,10 +122,10 @@ class PIT_Client {
                 <?php wp_nonce_field( 'pit_download_nonce', 'pit_nonce' ); ?>
 
                 <div class="pit-form-row">
-                    <label for="pit_tax_year"><?php esc_html_e( 'Rok podatkowy', 'obsluga-pit' ); ?> *</label>
+                    <label for="pit_tax_year"><?php esc_html_e( 'Rok podatkowy', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
                     <select name="tax_year" id="pit_tax_year" required>
                         <?php if ( empty( $years ) ) : ?>
-                            <option value=""><?php esc_html_e( 'Brak dostępnych lat', 'obsluga-pit' ); ?></option>
+                            <option value=""><?php esc_html_e( 'Brak dostępnych lat', 'obsluga-dokumentow-ksiegowych' ); ?></option>
                         <?php else : ?>
                             <?php foreach ( $years as $y ) : ?>
                                 <option value="<?php echo esc_attr( $y ); ?>">
@@ -137,41 +137,41 @@ class PIT_Client {
                 </div>
 
                 <div class="pit-form-row">
-                    <label for="pit_pesel"><?php esc_html_e( 'PESEL', 'obsluga-pit' ); ?> *</label>
+                    <label for="pit_pesel"><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
                     <input type="text" 
                            name="pesel" 
                            id="pit_pesel" 
                            pattern="[0-9]{11}" 
                            maxlength="11" 
-                           placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-pit' ); ?>"
+                           placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-dokumentow-ksiegowych' ); ?>"
                            required>
                 </div>
 
                 <div class="pit-form-row">
-                    <label for="pit_full_name"><?php esc_html_e( 'Imię i nazwisko', 'obsluga-pit' ); ?> *</label>
+                    <label for="pit_full_name"><?php esc_html_e( 'Imię i nazwisko', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
                     <input type="text" 
                            name="full_name" 
                            id="pit_full_name" 
-                           placeholder="<?php esc_attr_e( 'Np. Jan Kowalski', 'obsluga-pit' ); ?>"
+                           placeholder="<?php esc_attr_e( 'Np. Jan Kowalski', 'obsluga-dokumentow-ksiegowych' ); ?>"
                            required>
                 </div>
 
                 <div class="pit-form-row pit-checkbox-row">
                     <label class="pit-checkbox-label">
                         <input type="checkbox" name="confirm" id="pit_confirm" required>
-                        <?php esc_html_e( 'Potwierdzam otrzymanie dokumentu PIT.', 'obsluga-pit' ); ?>
+                        <?php esc_html_e( 'Potwierdzam otrzymanie dokumentu PIT.', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </label>
                 </div>
 
                 <div class="pit-form-row">
                     <button type="submit" class="button button-primary pit-submit-btn">
-                        <?php esc_html_e( 'Pobierz PIT-11', 'obsluga-pit' ); ?>
+                        <?php esc_html_e( 'Pobierz PIT-11', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </button>
                 </div>
             </form>
 
             <p class="pit-info">
-                <?php esc_html_e( 'Wprowadź swoje dane osobowe, aby pobrać formularz PIT-11. Dane muszą być zgodne z zapisami w dokumentacji księgowej.', 'obsluga-pit' ); ?>
+                <?php esc_html_e( 'Wprowadź swoje dane osobowe, aby pobrać formularz PIT-11. Dane muszą być zgodne z zapisami w dokumentacji księgowej.', 'obsluga-dokumentow-ksiegowych' ); ?>
             </p>
         </div>
         <?php

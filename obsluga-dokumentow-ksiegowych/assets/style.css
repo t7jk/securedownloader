@@ -50,6 +50,60 @@ body .pit-accountant-panel h3 {
     max-width: 500px;
 }
 
+/* Zakładki panelu księgowego */
+.pit-tabs {
+    display: flex;
+    gap: 0;
+    margin: 20px 0 0;
+    padding: 0;
+    border-bottom: 2px solid var(--pit-border);
+    list-style: none;
+}
+
+.pit-tab {
+    padding: 12px 20px;
+    margin: 0;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    background: transparent;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--pit-text);
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.pit-tab:hover {
+    color: var(--pit-accent);
+    background: rgba(44, 82, 130, 0.06);
+}
+
+.pit-tab.active {
+    color: var(--pit-accent);
+    border-bottom-color: var(--pit-accent);
+}
+
+.pit-tab-panel {
+    padding: 20px 0 0;
+    display: none;
+}
+
+.pit-tab-panel.active {
+    display: block;
+}
+
+.pit-tab-panel[hidden] {
+    display: none !important;
+}
+
+.pit-tab-panel-title {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.1em;
+}
+
 /* Formularze */
 .pit-client-form,
 .pit-accountant-panel form {

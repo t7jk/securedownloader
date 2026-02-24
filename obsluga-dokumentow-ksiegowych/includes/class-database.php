@@ -130,47 +130,76 @@ class PIT_Database {
 	}
 
 	/**
-	 * Zwraca PESEL pierwszej osoby o danym full_name (gdy wypełniony).
+	 * Zwraca PESEL pierwszej osoby o danym full_name (gdy wypełniony). Dopasowanie po kluczu osoby (np. „Ambrozik Ewelina 29” = „Ambrozik Ewelina”).
 	 *
-	 * @param string $full_name Imię i nazwisko (znormalizowane).
+	 * @param string $full_name Imię i nazwisko (dowolna forma).
 	 * @return string|null      PESEL lub null.
 	 */
 	public function get_pesel_by_full_name( string $full_name ): ?string {
 		global $wpdb;
 
-		$normalized = pit_normalize_full_name( $full_name );
-		$pesel      = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT pesel FROM %i WHERE full_name = %s AND pesel IS NOT NULL AND pesel != '' LIMIT 1",
-				self::$table_files,
-				$normalized
-			)
-		);
+		$key = pit_person_match_key( $full_name );
+		if ( $key === '' ) {
+			return null;
+		}
 
-		return is_string( $pesel ) && $pesel !== '' ? $pesel : null;
+		$rows = $wpdb->get_results(
+			"SELECT full_name, pesel FROM " . self::$table_files . " WHERE pesel IS NOT NULL AND pesel != ''",
+			OBJECT
+		);
+		foreach ( $rows as $row ) {
+			if ( pit_person_match_key( (string) $row->full_name ) === $key ) {
+				return is_string( $row->pesel ) && $row->pesel !== '' ? $row->pesel : null;
+			}
+		}
+		return null;
 	}
 
 	/**
-	 * Ustawia PESEL dla wszystkich rekordów danej osoby (full_name).
+	 * Ustawia PESEL dla wszystkich rekordów danej osoby (dopasowanie po znormalizowanym full_name).
 	 *
-	 * @param string $full_name Imię i nazwisko (znormalizowane).
+	 * @param string $full_name Imię i nazwisko (dowolna forma, zostanie znormalizowana).
 	 * @param string $pesel     PESEL (11 cyfr).
 	 * @return int              Liczba zaktualizowanych wierszy.
 	 */
 	public function update_pesel_for_person( string $full_name, string $pesel ): int {
 		global $wpdb;
 
-		$normalized = pit_normalize_full_name( $full_name );
-		$pesel      = preg_replace( '/\D/', '', $pesel );
-		$pesel      = substr( $pesel, 0, 11 );
+		$pesel = preg_replace( '/\D/', '', $pesel );
+		$pesel = substr( $pesel, 0, 11 );
 
-		return (int) $wpdb->update(
-			self::$table_files,
-			[ 'pesel' => $pesel ],
-			[ 'full_name' => $normalized ],
-			[ '%s' ],
-			[ '%s' ]
+		if ( strlen( $pesel ) !== 11 ) {
+			return 0;
+		}
+
+		$key = pit_person_match_key( $full_name );
+		if ( $key === '' ) {
+			return 0;
+		}
+
+		$rows = $wpdb->get_results(
+			"SELECT id, full_name FROM " . self::$table_files,
+			OBJECT
 		);
+
+		$updated = 0;
+		foreach ( $rows as $row ) {
+			if ( pit_person_match_key( (string) $row->full_name ) !== $key ) {
+				continue;
+			}
+			$n = $wpdb->update(
+				self::$table_files,
+				[ 'pesel' => $pesel ],
+				[ 'id' => (int) $row->id ],
+				[ '%s' ],
+				[ '%d' ]
+			);
+			if ( $n !== false ) {
+				$updated += (int) $n;
+			}
+		}
+
+		return $updated;
 	}
 
 	/**
@@ -452,8 +481,8 @@ class PIT_Database {
 		}
 
 		$upload_dir   = wp_upload_dir();
-		$pit_dir      = $upload_dir['basedir'] . '/obsluga-pit/';
-		$pit_url_base = $upload_dir['baseurl'] . '/obsluga-pit/';
+		$pit_dir      = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
+		$pit_url_base = $upload_dir['baseurl'] . '/obsluga-dokumentow-ksiegowych/';
 
 		if ( is_dir( $pit_dir ) ) {
 			$years = scandir( $pit_dir );

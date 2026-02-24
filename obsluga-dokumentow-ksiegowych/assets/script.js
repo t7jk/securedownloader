@@ -12,6 +12,7 @@
         initTableSorting();
         initBulkActions();
         initBrakPeselLink();
+        initAccountantTabs();
     });
 
     /**
@@ -213,7 +214,30 @@
     }
 
     /**
-     * Klik w "Brak PESEL" pokazuje formularz uzupełnienia PESEL.
+     * Przełączanie zakładek w panelu księgowego (bez przeładowania strony).
+     */
+    function initAccountantTabs() {
+        var $panel = $('.pit-accountant-panel');
+        if ($panel.length === 0) return;
+
+        $(document).on('click', '.pit-tab', function(e) {
+            e.preventDefault();
+            var tabId = $(this).data('pit-tab');
+            if (!tabId) return;
+
+            $('.pit-tab').removeClass('active').attr('aria-selected', 'false');
+            $(this).addClass('active').attr('aria-selected', 'true');
+
+            $('.pit-tab-panel').removeClass('active').attr('hidden', true);
+            var $target = $('#pit-tab-' + tabId);
+            if ($target.length) {
+                $target.addClass('active').removeAttr('hidden');
+            }
+        });
+    }
+
+    /**
+     * Klik w "Brak PESEL" pokazuje pole i przycisk Zapisz (bez zagnieżdżonego formularza).
      */
     function initBrakPeselLink() {
         $(document).on('click', '.pit-brak-pesel-link', function(e) {
@@ -223,8 +247,31 @@
             if ($form.length) {
                 $link.hide();
                 $form.show();
-                $form.find('input[type="text"]').focus();
+                $form.find('.pit-set-pesel-value').focus();
             }
+        });
+
+        $(document).on('click', '.pit-set-pesel-save', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var $formSpan = $btn.closest('.pit-set-pesel-form');
+            var fullName = $formSpan.data('full-name');
+            var value = $formSpan.find('.pit-set-pesel-value').val().replace(/\D/g, '');
+            if (value.length !== 11) {
+                alert(pitManager.errorPesel || 'PESEL musi składać się z 11 cyfr.');
+                return;
+            }
+            var $data = $('#pit-pesel-form-data');
+            if (!$data.length) return;
+            var url = $data.data('url');
+            var nonce = $data.data('nonce');
+            var $f = $('<form>').attr({ method: 'post', action: url }).hide();
+            $f.append($('<input>').attr({ type: 'hidden', name: 'action', value: 'pit_set_pesel_front' }));
+            $f.append($('<input>').attr({ type: 'hidden', name: 'pit_set_pesel_front_nonce', value: nonce }));
+            $f.append($('<input>').attr({ type: 'hidden', name: 'pit_set_pesel_full_name', value: fullName }));
+            $f.append($('<input>').attr({ type: 'hidden', name: 'pit_set_pesel_value', value: value }));
+            $('body').append($f);
+            $f.submit();
         });
     }
 

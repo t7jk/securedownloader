@@ -1,6 +1,6 @@
 <?php
 /**
- * Obsługa PIT - Uninstall
+ * Obsługa dokumentów księgowych - Uninstall
  * Ten plik jest uruchamiany gdy wtyczka jest odinstalowywana.
  */
 
@@ -35,7 +35,7 @@ function pit_uninstall_rmdir( $dir ) {
 }
 
 $upload_dir      = wp_upload_dir();
-$pit_upload_dir  = $upload_dir['basedir'] . '/obsluga-pit/';
+$pit_upload_dir  = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
 
 if ( is_dir( $pit_upload_dir ) ) {
 	pit_uninstall_rmdir( $pit_upload_dir );

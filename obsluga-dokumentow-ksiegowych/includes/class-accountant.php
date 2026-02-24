@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Klasa panelu księgowego wtyczki PIT-11 Manager.
- * Umożliwia wgrywanie plików PDF PIT-11 i zarządzanie nimi.
+ * Umożliwia wgrywanie dokumentów księgowych i zarządzanie nimi.
  */
 class PIT_Accountant {
 
@@ -85,8 +85,95 @@ class PIT_Accountant {
     }
 
     /**
-     * Parsuje nazwę pliku wg listy filtrów (segmenty rozdzielone *).
-     * Np. "Nazwisko Imię*PIT-11*NNNN" → full_name, tytuł dokumentu, rok.
+     * Parsuje nazwę pliku wg jednego filtra w formacie {VAR} i /literal/ (od lewej do prawej).
+     *
+     * @param string $filename Pełna nazwa pliku (np. z rozszerzeniem .pdf).
+     * @param string $filter    Ciąg z blokami {NAZWISKO}, {IMIĘ}, {RRRR}, {PPPPPPPPPPP} oraz /literal/.
+     * @return array|false Tablica full_name, tax_year, pesel lub false.
+     */
+    private function parse_filename_brace_filter( string $filename, string $filter ): array|false {
+        if ( strpos( $filter, '{' ) === false || strpos( $filter, '/' ) === false ) {
+            return false;
+        }
+        $tokens = [];
+        $pos    = 0;
+        $len    = strlen( $filter );
+        while ( $pos < $len ) {
+            if ( $filter[ $pos ] === '{' ) {
+                $end = strpos( $filter, '}', $pos );
+                if ( $end === false ) {
+                    return false;
+                }
+                $tokens[] = [ 'type' => 'capture', 'value' => substr( $filter, $pos + 1, $end - $pos - 1 ) ];
+                $pos      = $end + 1;
+                continue;
+            }
+            if ( $filter[ $pos ] === '/' ) {
+                $end = strpos( $filter, '/', $pos + 1 );
+                if ( $end === false ) {
+                    return false;
+                }
+                $tokens[] = [ 'type' => 'literal', 'value' => substr( $filter, $pos + 1, $end - $pos - 1 ) ];
+                $pos      = $end + 1;
+                continue;
+            }
+            $pos++;
+        }
+        if ( empty( $tokens ) ) {
+            return false;
+        }
+        $regex         = '^';
+        $capture_names = [];
+        foreach ( $tokens as $t ) {
+            if ( $t['type'] === 'capture' ) {
+                $capture_names[] = $t['value'];
+                if ( $t['value'] === 'RRRR' ) {
+                    $regex .= '(\d{4})';
+                } elseif ( $t['value'] === 'PPPPPPPPPPP' ) {
+                    $regex .= '(\d{11})';
+                } else {
+                    $regex .= '(.+?)';
+                }
+            } else {
+                $literal_regex = preg_quote( $t['value'], '/' );
+                $literal_regex = preg_replace( '/\s+/', '\\s+', $literal_regex );
+                $regex .= $literal_regex;
+            }
+        }
+        $regex .= '$';
+        if ( ! preg_match( '/' . $regex . '/us', $filename, $m ) ) {
+            return false;
+        }
+        $vars = [];
+        $idx  = 1;
+        foreach ( $capture_names as $name ) {
+            if ( isset( $m[ $idx ] ) ) {
+                $vars[ $name ] = $m[ $idx ];
+            }
+            $idx++;
+        }
+        $current_year = (int) date( 'Y' );
+        $tax_year     = isset( $vars['RRRR'] ) ? (int) $vars['RRRR'] : $current_year - 1;
+        if ( $tax_year < 2000 || $tax_year > $current_year + 1 ) {
+            $tax_year = $current_year - 1;
+        }
+        $pesel = isset( $vars['PPPPPPPPPPP'] ) && preg_match( '/^\d{11}$/', $vars['PPPPPPPPPPP'] ) ? $vars['PPPPPPPPPPP'] : '';
+        $nazwisko = isset( $vars['NAZWISKO'] ) ? pit_normalize_full_name( $vars['NAZWISKO'] ) : '';
+        $imie     = isset( $vars['IMIĘ'] ) ? pit_normalize_full_name( $vars['IMIĘ'] ) : '';
+        $full_name = trim( $nazwisko . ' ' . $imie );
+        if ( $full_name === '' ) {
+            return false;
+        }
+        return [
+            'tax_year'  => $tax_year,
+            'full_name' => $full_name,
+            'pesel'     => $pesel,
+        ];
+    }
+
+    /**
+     * Parsuje nazwę pliku wg listy filtrów (segmenty rozdzielone * lub format {VAR}/literal/).
+     * Np. "NAZWISKO IMIĘ*PIT-11*RRRR" → full_name, tytuł dokumentu, rok.
      *
      * @param string   $filename Nazwa pliku (np. Zalewska Natalia - PIT-11 (29) - rok 2025.pdf).
      * @param string[] $filters  Lista rekordów filtrów.
@@ -115,14 +202,6 @@ class PIT_Accountant {
             $pesel = $pm[1];
         }
 
-        $doc_found = false;
-        if ( stripos( $base, 'PIT-11' ) !== false ) {
-            $doc_found = true;
-        }
-        if ( stripos( $base, 'Informacja roczna' ) !== false ) {
-            $doc_found = true;
-        }
-
         $name_base = $base;
         $name_base = preg_replace( '/\b(19|20)\d{2}\b/', '', $name_base );
         $name_base = preg_replace( '/\b\d{11}\b/', '', $name_base );
@@ -131,18 +210,30 @@ class PIT_Accountant {
         $name_base = preg_replace( '/[-\s()]+/', ' ', $name_base );
         $name_base = preg_replace( '/\brok\b/i', '', $name_base );
         $full_name = pit_normalize_full_name( $name_base );
+        $full_name = preg_replace( '/^dla\s+/iu', '', $full_name );
+
+        // Dokument uznany za poprawny, gdy w nazwie jest PESEL lub da się wyciągnąć imię i nazwisko (dowolny rodzaj dokumentu).
+        $doc_found = ( $pesel !== '' || $full_name !== '' );
 
         foreach ( $filters as $filter_str ) {
             $filter_str = trim( (string) $filter_str );
             if ( $filter_str === '' ) {
                 continue;
             }
+            if ( strpos( $filter_str, '{' ) !== false ) {
+                $parsed = $this->parse_filename_brace_filter( $filename, $filter_str );
+                if ( $parsed !== false ) {
+                    return $parsed;
+                }
+                continue;
+            }
             $segments = array_map( 'trim', explode( '*', $filter_str ) );
             $needs_pesel = false;
             $needs_doc   = false;
             $needs_name  = false;
-            foreach ( $segments as $seg ) {
-                if ( stripos( $seg, 'PESEL' ) !== false ) {
+            $name_seg_index = -1;
+            foreach ( $segments as $i => $seg ) {
+                if ( stripos( $seg, 'PESEL' ) !== false || stripos( $seg, 'PPPPPPPPPPP' ) !== false ) {
                     $needs_pesel = true;
                 }
                 if ( stripos( $seg, 'PIT-11' ) !== false || stripos( $seg, 'Informacja' ) !== false ) {
@@ -150,6 +241,9 @@ class PIT_Accountant {
                 }
                 if ( stripos( $seg, 'Nazwisko' ) !== false || stripos( $seg, 'Imię' ) !== false ) {
                     $needs_name = true;
+                    if ( $name_seg_index < 0 ) {
+                        $name_seg_index = $i;
+                    }
                 }
             }
             if ( $needs_pesel && $pesel === '' ) {
@@ -164,9 +258,73 @@ class PIT_Accountant {
             if ( $needs_doc && ! $doc_found ) {
                 return false;
             }
+
+            // Wyciągnij imię i nazwisko według filtra: usuń z początku nazwy pliku literał (prefix) przed segmentem "Nazwisko Imię".
+            if ( $name_seg_index > 0 ) {
+                $literal_parts = array_slice( $segments, 0, $name_seg_index );
+                $literal_prefix = implode( ' ', $literal_parts );
+                $literal_prefix = preg_quote( $literal_prefix, '/' );
+                $literal_prefix = preg_replace( '/\s+/', '[\\s\\-()]+', $literal_prefix );
+                if ( preg_match( '/^' . $literal_prefix . '[\s\-()]*(.*)$/ius', $base, $m ) ) {
+                    $rest = $m[1];
+                    // Gdy literał to "Informacja roczna ", * mogło dopasować "dla " – usuń ten prefix z reszty.
+                    if ( stripos( $literal_parts[0] ?? '', 'Informacja roczna' ) === 0 && preg_match( '/^dla\s+/iu', $rest ) ) {
+                        $rest = preg_replace( '/^dla\s+/iu', '', $rest );
+                    }
+                    $rest = preg_replace( '/\b(19|20)\d{2}\b/', '', $rest );
+                    $rest = preg_replace( '/\b\d{11}\b/', '', $rest );
+                    $rest = preg_replace( '/\.pdf$/i', '', $rest );
+                    $rest = preg_replace( '/[-\s()]+/', ' ', $rest );
+                    $rest = pit_normalize_full_name( $rest );
+                    if ( $rest !== '' ) {
+                        $full_name = $rest;
+                    }
+                }
+            } elseif ( $name_seg_index === 0 && count( $segments ) > 1 ) {
+                // Filtr typu "NAZWISKO IMIĘ - PIT-11* rok RRRR.pdf" – imię i nazwisko to wszystko przed " - PIT-11" w nazwie pliku.
+                $seg0 = $segments[0];
+                if ( stripos( $seg0, 'PIT-11' ) !== false && ( stripos( $seg0, 'Nazwisko' ) !== false || stripos( $seg0, 'Imię' ) !== false ) ) {
+                    if ( preg_match( '/^(.+?)\s*-\s*PIT-11\b/i', $base, $m ) ) {
+                        $rest = pit_normalize_full_name( $m[1] );
+                        if ( $rest !== '' ) {
+                            $full_name = $rest;
+                        }
+                    }
+                }
+            } elseif ( $name_seg_index === 0 && count( $segments ) === 1 ) {
+                $seg = $segments[0];
+                // Filtr typu "NAZWISKO IMIĘ - PIT-11 (29) - rok RRRR.pdf" (jeden segment) – imię i nazwisko to wszystko przed " - PIT-11".
+                if ( stripos( $seg, 'PIT-11' ) !== false && ( stripos( $seg, 'Nazwisko' ) !== false || stripos( $seg, 'Imię' ) !== false ) ) {
+                    if ( preg_match( '/^(.+?)\s*-\s*PIT-11\b/i', $base, $m ) ) {
+                        $rest = pit_normalize_full_name( $m[1] );
+                        if ( $rest !== '' ) {
+                            $full_name = $rest;
+                        }
+                    }
+                }
+                // Filtr "Informacja roczna dla NAZWISKO IMIĘ.pdf" – usuń znany prefix z początku nazwy pliku.
+                elseif ( stripos( $seg, 'Informacja roczna dla' ) === 0 && ( stripos( $seg, 'Nazwisko' ) !== false || stripos( $seg, 'Imię' ) !== false ) ) {
+                    $literal_prefix = preg_quote( 'Informacja roczna dla', '/' );
+                    $literal_prefix = preg_replace( '/\s+/', '[\\s\\-()]+', $literal_prefix );
+                    if ( preg_match( '/^' . $literal_prefix . '[\s\-()]*(.*)$/ius', $base, $m ) ) {
+                        $rest = $m[1];
+                        $rest = preg_replace( '/\b(19|20)\d{2}\b/', '', $rest );
+                        $rest = preg_replace( '/\b\d{11}\b/', '', $rest );
+                        $rest = preg_replace( '/\.pdf$/i', '', $rest );
+                        $rest = preg_replace( '/[-\s()]+/', ' ', $rest );
+                        $rest = pit_normalize_full_name( $rest );
+                        if ( $rest !== '' ) {
+                            $full_name = $rest;
+                        }
+                    }
+                }
+            }
+
+            $out_name = $full_name !== '' ? $full_name : 'Nieznany';
+            $out_name = preg_replace( '/^dla\s+/iu', '', $out_name );
             return [
                 'tax_year'  => $tax_year,
-                'full_name' => $full_name !== '' ? $full_name : 'Nieznany',
+                'full_name' => $out_name,
                 'pesel'     => $pesel,
             ];
         }
@@ -178,6 +336,7 @@ class PIT_Accountant {
             return false;
         }
 
+        $full_name = preg_replace( '/^dla\s+/iu', '', $full_name );
         return [
             'tax_year'  => $tax_year,
             'full_name' => $full_name,
@@ -217,24 +376,25 @@ class PIT_Accountant {
 
         if ( $post && has_shortcode( $post->post_content, 'pit_accountant_panel' ) ) {
             wp_enqueue_style(
-                'obsluga-pit-style',
+                'obsluga-dokumentow-ksiegowych-style',
                 PIT_PLUGIN_URL . 'assets/style.css',
                 [],
                 PIT_VERSION
             );
 
             wp_enqueue_script(
-                'obsluga-pit-script',
+                'obsluga-dokumentow-ksiegowych-script',
                 PIT_PLUGIN_URL . 'assets/script.js',
                 [ 'jquery' ],
                 PIT_VERSION,
                 true
             );
 
-            wp_localize_script( 'obsluga-pit-script', 'pitManager', [
+            wp_localize_script( 'obsluga-dokumentow-ksiegowych-script', 'pitManager', [
                 'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
                 'nonce'         => wp_create_nonce( 'pit_manager_nonce' ),
-                'confirmDelete' => __( 'Czy na pewno usunąć ten plik?', 'obsluga-pit' ),
+                'confirmDelete' => __( 'Czy na pewno usunąć ten dokument?', 'obsluga-dokumentow-ksiegowych' ),
+                'errorPesel'    => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
             ] );
         }
     }
@@ -253,11 +413,11 @@ class PIT_Accountant {
             if ( ! is_user_logged_in() ) {
                 $login_url = wp_login_url( get_permalink() );
                 return '<p class="pit-error">' . sprintf(
-                    esc_html__( 'Musisz się zalogować. %s', 'obsluga-pit' ),
-                    '<a href="' . esc_url( $login_url ) . '">' . esc_html__( 'Zaloguj się', 'obsluga-pit' ) . '</a>'
+                    esc_html__( 'Musisz się zalogować. %s', 'obsluga-dokumentow-ksiegowych' ),
+                    '<a href="' . esc_url( $login_url ) . '">' . esc_html__( 'Zaloguj się', 'obsluga-dokumentow-ksiegowych' ) . '</a>'
                 ) . '</p>';
             }
-            return '<p class="pit-error">' . esc_html__( 'Brak dostępu do tego panelu.', 'obsluga-pit' ) . '</p>';
+            return '<p class="pit-error">' . esc_html__( 'Brak dostępu do tego panelu.', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
         }
 
         $message       = '';
@@ -267,85 +427,89 @@ class PIT_Accountant {
             $errors   = (int) $_GET['pit_errors'];
             $skipped  = (int) ( $_GET['pit_skipped'] ?? 0 );
             $message  = sprintf(
-                __( 'Wgrano %d plików.', 'obsluga-pit' ),
+                __( 'Wgrano %d dokumentów.', 'obsluga-dokumentow-ksiegowych' ),
                 $uploaded
             );
             if ( $skipped > 0 ) {
-                $message .= ' ' . sprintf( __( 'Pominięto %d (już istnieją).', 'obsluga-pit' ), $skipped );
+                $message .= ' ' . sprintf( __( 'Pominięto %d (już istnieją).', 'obsluga-dokumentow-ksiegowych' ), $skipped );
             }
             if ( $errors > 0 ) {
-                $message .= ' ' . sprintf( __( 'Błędów: %d.', 'obsluga-pit' ), $errors );
+                $message .= ' ' . sprintf( __( 'Błędów: %d.', 'obsluga-dokumentow-ksiegowych' ), $errors );
+            }
+        }
+        $upload_failed_list = [];
+        if ( ! empty( $_GET['pit_upload_failed'] ) && $_GET['pit_upload_failed'] === '1' ) {
+            $upload_failed_list = get_transient( 'pit_upload_failed_files_' . get_current_user_id() );
+            if ( is_array( $upload_failed_list ) ) {
+                delete_transient( 'pit_upload_failed_files_' . get_current_user_id() );
+            } else {
+                $upload_failed_list = [];
             }
         }
         if ( isset( $_GET['pit_deleted'] ) && $_GET['pit_deleted'] === '1' ) {
-            $message = __( 'Plik został usunięty.', 'obsluga-pit' );
+            $message = __( 'Dokument został usunięty.', 'obsluga-dokumentow-ksiegowych' );
         }
         if ( isset( $_GET['pit_bulk_deleted'] ) ) {
             $count = (int) $_GET['pit_bulk_deleted'];
             $message = sprintf(
-                _n( 'Usunięto %d plik.', 'Usunięto %d plików.', $count, 'obsluga-pit' ),
+                _n( 'Usunięto %d dokument.', 'Usunięto %d dokumentów.', $count, 'obsluga-dokumentow-ksiegowych' ),
                 $count
             );
         }
         if ( isset( $_GET['pit_set_pesel_ok'] ) && $_GET['pit_set_pesel_ok'] === '1' ) {
-            $message = __( 'PESEL został zapisany.', 'obsluga-pit' );
+            $message = __( 'PESEL został zapisany.', 'obsluga-dokumentow-ksiegowych' );
         }
         if ( isset( $_GET['pit_set_pesel_error'] ) && $_GET['pit_set_pesel_error'] === '1' ) {
-            $message       = __( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'obsluga-pit' );
+            $message       = __( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'obsluga-dokumentow-ksiegowych' );
             $message_class = 'pit-error';
         }
 
-        $db     = PIT_Database::get_instance();
-        $files  = $db->get_all_files_sorted();
+        $db = PIT_Database::get_instance();
+        set_time_limit( 90 );
+        $this->maybe_pack_zip_for_same_person_year( $db );
+        $this->fill_missing_pesel_after_upload( $db );
+        $files = $db->get_all_files_sorted();
 
         ob_start();
 
         ?>
         <div class="pit-accountant-panel">
-            <h2><?php esc_html_e( 'Panel Księgowego – PIT-11', 'obsluga-pit' ); ?></h2>
+            <h2><?php esc_html_e( 'Panel Księgowego', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
 
             <?php if ( $message ) : ?>
                 <div class="pit-message <?php echo esc_attr( $message_class ); ?>">
                     <?php echo esc_html( $message ); ?>
                 </div>
             <?php endif; ?>
-
-            <h3><?php esc_html_e( 'Wgraj pliki PIT-11', 'obsluga-pit' ); ?></h3>
-            <p class="description">
-                <?php
-                $filters = get_option( 'pit_filename_filters', [] );
-                if ( ! empty( $filters ) && is_array( $filters ) ) {
-                    esc_html_e( 'Format nazwy pliku (aktywne filtry z Ustawień):', 'obsluga-pit' );
-                    echo ' <strong>' . esc_html( implode( '; ', array_slice( $filters, 0, 2 ) ) ) . '</strong>';
-                } else {
-                    esc_html_e( 'Format nazwy pliku:', 'obsluga-pit' );
-                    echo ' <strong>PIT-11_rok_YYYY_Nazwisko_Imię_PESEL.pdf</strong>';
-                }
-                ?>
-                <br>
-                <?php esc_html_e( 'Możesz wgrać 1 lub więcej plików jednocześnie.', 'obsluga-pit' ); ?>
-            </p>
-
-            <form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                <?php wp_nonce_field( 'pit_upload_nonce', 'pit_nonce' ); ?>
-                <input type="hidden" name="action" value="pit_upload_files">
-
-                <div class="pit-form-row">
-                    <input type="file" name="pit_pdfs[]" multiple accept=".pdf" required>
+            <?php if ( ! empty( $upload_failed_list ) ) : ?>
+                <div class="pit-message pit-error">
+                    <p><?php esc_html_e( 'Nie zaimportowano następujących plików:', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                    <ul class="pit-failed-files-list">
+                        <?php foreach ( $upload_failed_list as $item ) : ?>
+                            <li><strong><?php echo esc_html( $item['name'] ); ?></strong> — <?php echo esc_html( $item['reason'] ); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
                 </div>
+            <?php endif; ?>
 
-                <div class="pit-form-row">
-                    <button type="submit" class="button button-primary">
-                        <?php esc_html_e( 'Wgraj pliki', 'obsluga-pit' ); ?>
-                    </button>
-                </div>
-            </form>
+            <nav class="pit-tabs" role="tablist" aria-label="<?php esc_attr_e( 'Zakładki panelu', 'obsluga-dokumentow-ksiegowych' ); ?>">
+                <button type="button" class="pit-tab active" role="tab" id="pit-tab-btn-lista" aria-selected="true" aria-controls="pit-tab-lista" data-pit-tab="lista">
+                    <?php esc_html_e( 'Lista dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </button>
+                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-upload" aria-selected="false" aria-controls="pit-tab-upload" data-pit-tab="upload">
+                    <?php esc_html_e( 'Wgraj dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </button>
+                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-raport" aria-selected="false" aria-controls="pit-tab-raport" data-pit-tab="raport">
+                    <?php esc_html_e( 'Generuj raport', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </button>
+            </nav>
 
-            <hr>
+            <div id="pit-tab-lista" class="pit-tab-panel active" role="tabpanel" aria-labelledby="pit-tab-btn-lista">
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Lista dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
 
-            <h3><?php esc_html_e( 'Lista PIT-ów', 'obsluga-pit' ); ?></h3>
+                <div id="pit-pesel-form-data" style="display:none;" data-nonce="<?php echo esc_attr( wp_create_nonce( 'pit_set_pesel_front' ) ); ?>" data-url="<?php echo esc_attr( admin_url( 'admin-post.php' ) ); ?>"></div>
 
-            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-bulk-delete-form">
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-bulk-delete-form">
                 <?php wp_nonce_field( 'pit_bulk_delete_nonce', 'pit_bulk_delete_nonce' ); ?>
                 <input type="hidden" name="action" value="pit_bulk_delete_files">
 
@@ -353,17 +517,17 @@ class PIT_Accountant {
                     <thead>
                         <tr>
                             <th><input type="checkbox" id="pit-select-all"></th>
-                            <th><?php esc_html_e( 'Lp.', 'obsluga-pit' ); ?></th>
-                            <th class="sortable" data-sort="name"><?php esc_html_e( 'Imię i nazwisko', 'obsluga-pit' ); ?> <span class="sort-icon">↕</span></th>
-                            <th class="sortable" data-sort="pesel"><?php esc_html_e( 'PESEL', 'obsluga-pit' ); ?> <span class="sort-icon">↕</span></th>
-                            <th class="sortable" data-sort="year"><?php esc_html_e( 'Rok', 'obsluga-pit' ); ?> <span class="sort-icon">↕</span></th>
-                            <th class="sortable" data-sort="date"><?php esc_html_e( 'Data pobrania', 'obsluga-pit' ); ?> <span class="sort-icon">↕</span></th>
+                            <th><?php esc_html_e( 'Lp.', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                            <th class="sortable" data-sort="name"><?php esc_html_e( 'Imię i nazwisko', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
+                            <th class="sortable" data-sort="pesel"><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
+                            <th class="sortable" data-sort="year"><?php esc_html_e( 'Rok', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
+                            <th class="sortable" data-sort="date"><?php esc_html_e( 'Data pobrania', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if ( empty( $files ) ) : ?>
                             <tr>
-                                <td colspan="6"><?php esc_html_e( 'Brak dokumentów.', 'obsluga-pit' ); ?></td>
+                                <td colspan="6"><?php esc_html_e( 'Brak dokumentów.', 'obsluga-dokumentow-ksiegowych' ); ?></td>
                             </tr>
                         <?php else : ?>
                             <?php $i = 1; foreach ( $files as $file ) : 
@@ -377,18 +541,14 @@ class PIT_Accountant {
                                         <?php
                                         $pesel_empty = ( $file->pesel === '' || $file->pesel === null );
                                         if ( $pesel_empty ) :
-                                            $set_pesel_url = admin_url( 'admin-post.php' );
                                             ?>
-                                            <form method="post" action="<?php echo esc_url( $set_pesel_url ); ?>" class="pit-inline-pesel-form" style="display:inline;">
-                                                <input type="hidden" name="action" value="pit_set_pesel_front">
-                                                <?php wp_nonce_field( 'pit_set_pesel_front', 'pit_set_pesel_front_nonce' ); ?>
-                                                <input type="hidden" name="pit_set_pesel_full_name" value="<?php echo esc_attr( $file->full_name ); ?>">
-                                                <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Brak PESEL', 'obsluga-pit' ); ?></a>
-                                                <span class="pit-set-pesel-form" style="display:none;">
-                                                    <input type="text" name="pit_set_pesel_value" placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-pit' ); ?>" maxlength="11" pattern="\d{11}" size="11">
-                                                    <button type="submit" class="button button-small"><?php esc_html_e( 'Zapisz', 'obsluga-pit' ); ?></button>
+                                            <span class="pit-pesel-cell-empty">
+                                                <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Brak PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></a>
+                                                <span class="pit-set-pesel-form" style="display:none;" data-full-name="<?php echo esc_attr( $file->full_name ); ?>">
+                                                    <input type="text" class="pit-set-pesel-value" placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-dokumentow-ksiegowych' ); ?>" maxlength="11" pattern="\d{11}" size="11">
+                                                    <button type="button" class="pit-set-pesel-save button button-small"><?php esc_html_e( 'Zapisz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                                                 </span>
-                                            </form>
+                                            </span>
                                         <?php else : ?>
                                             <?php echo esc_html( substr( (string) $file->pesel, 0, 4 ) . '....' . substr( (string) $file->pesel, 8, 3 ) ); ?>
                                         <?php endif; ?>
@@ -398,7 +558,7 @@ class PIT_Accountant {
                                         <?php 
                                         echo $is_downloaded 
                                             ? esc_html( $file->last_download ) 
-                                            : '<em>' . esc_html__( 'Nie pobrano', 'obsluga-pit' ) . '</em>'; 
+                                            : '<em>' . esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ) . '</em>'; 
                                         ?>
                                     </td>
                                 </tr>
@@ -408,41 +568,75 @@ class PIT_Accountant {
                 </table>
 
                 <div class="pit-form-row" id="pit-bulk-actions" style="display:none; margin-top: 10px;">
-                    <button type="submit" class="button button-link-delete" onclick="return confirm('<?php esc_attr_e( 'Czy na pewno usunąć zaznaczone pliki?', 'obsluga-pit' ); ?>')">
-                        <?php esc_html_e( 'Usuń zaznaczone', 'obsluga-pit' ); ?>
+                    <button type="submit" class="button button-link-delete" onclick="return confirm('<?php esc_attr_e( 'Czy na pewno usunąć zaznaczone dokumenty?', 'obsluga-dokumentow-ksiegowych' ); ?>')">
+                        <?php esc_html_e( 'Usuń zaznaczone', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </button>
                     <span id="pit-selected-count"></span>
                 </div>
             </form>
+            </div>
 
-            <hr>
+            <div id="pit-tab-upload" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-upload" hidden>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Wgraj dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <p class="description">
+                    <?php
+                    $filters = get_option( 'pit_filename_filters', [] );
+                    if ( ! empty( $filters ) && is_array( $filters ) ) {
+                        esc_html_e( 'Aktywne filtry:', 'obsluga-dokumentow-ksiegowych' );
+                        echo '<br>';
+                        foreach ( array_slice( $filters, 0, 10 ) as $filter ) {
+                            echo '<strong>' . esc_html( $filter ) . '</strong><br>';
+                        }
+                    }
+                    ?>
+                    <br>
+                    <?php esc_html_e( 'Możesz wgrać 1 lub więcej dokumentów jednocześnie.', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </p>
 
-            <h3><?php esc_html_e( 'Raport', 'obsluga-pit' ); ?></h3>
-            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                <?php wp_nonce_field( 'pit_report_pdf_nonce', 'pit_report_pdf_nonce' ); ?>
-                <input type="hidden" name="action" value="pit_generate_report_pdf">
+                <form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                    <?php wp_nonce_field( 'pit_upload_nonce', 'pit_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_upload_files">
 
-                <div class="pit-form-row">
-                    <label for="pit-report-year"><?php esc_html_e( 'Wybierz rok:', 'obsluga-pit' ); ?></label>
-                    <select name="year" id="pit-report-year">
-                        <option value="0"><?php esc_html_e( 'Wszystkie lata', 'obsluga-pit' ); ?></option>
-                        <?php 
-                        $years = $db->get_available_years();
-                        foreach ( $years as $y ) : 
-                        ?>
-                            <option value="<?php echo esc_attr( $y ); ?>">
-                                <?php echo esc_html( $y ); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                    <div class="pit-form-row">
+                        <input type="file" name="pit_pdfs[]" multiple accept=".pdf" required>
+                    </div>
 
-                <div class="pit-form-row">
-                    <button type="submit" class="button">
-                        <?php esc_html_e( 'Generuj raport PDF', 'obsluga-pit' ); ?>
-                    </button>
-                </div>
-            </form>
+                    <div class="pit-form-row">
+                        <button type="submit" class="button button-primary">
+                            <?php esc_html_e( 'Wgraj dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="pit-tab-raport" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-raport" hidden>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Raport pobrania dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                    <?php wp_nonce_field( 'pit_report_pdf_nonce', 'pit_report_pdf_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_generate_report_pdf">
+
+                    <div class="pit-form-row">
+                        <label for="pit-report-year"><?php esc_html_e( 'Wybierz rok:', 'obsluga-dokumentow-ksiegowych' ); ?></label>
+                        <select name="year" id="pit-report-year">
+                            <option value="0"><?php esc_html_e( 'Wszystkie lata', 'obsluga-dokumentow-ksiegowych' ); ?></option>
+                            <?php
+                            $years = $db->get_available_years();
+                            foreach ( $years as $y ) :
+                            ?>
+                                <option value="<?php echo esc_attr( $y ); ?>">
+                                    <?php echo esc_html( $y ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="pit-form-row">
+                        <button type="submit" class="button">
+                            <?php esc_html_e( 'Generuj raport PDF', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
         <?php
 
@@ -454,22 +648,25 @@ class PIT_Accountant {
      */
     public function handle_upload(): void {
         if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( ! wp_verify_nonce( $_POST['pit_nonce'] ?? '', 'pit_upload_nonce' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( empty( $_FILES['pit_pdfs'] ) || empty( $_FILES['pit_pdfs']['name'] ) ) {
-            wp_die( __( 'Nie wybrano plików.', 'obsluga-pit' ) );
+            wp_die( __( 'Nie wybrano dokumentów.', 'obsluga-dokumentow-ksiegowych' ) );
         }
+
+        set_time_limit( 120 );
 
         require_once ABSPATH . 'wp-admin/includes/file.php';
 
         $uploaded   = 0;
         $errors     = 0;
         $skipped    = 0;
+        $failed     = [];
         $db         = PIT_Database::get_instance();
         $filters    = get_option( 'pit_filename_filters', [] );
         $inserted_ids = [];
@@ -480,6 +677,10 @@ class PIT_Accountant {
         for ( $i = 0; $i < $count; $i++ ) {
             if ( $files['error'][$i] !== UPLOAD_ERR_OK ) {
                 $errors++;
+                $failed[] = [
+                    'name'   => $files['name'][$i],
+                    'reason' => __( 'Błąd wgrywania pliku.', 'obsluga-dokumentow-ksiegowych' ),
+                ];
                 continue;
             }
 
@@ -489,6 +690,10 @@ class PIT_Accountant {
 
             if ( 'application/pdf' !== $type && ! str_ends_with( strtolower( $name ), '.pdf' ) ) {
                 $errors++;
+                $failed[] = [
+                    'name'   => $name,
+                    'reason' => __( 'Nieprawidłowy typ pliku (wymagany PDF).', 'obsluga-dokumentow-ksiegowych' ),
+                ];
                 continue;
             }
 
@@ -501,11 +706,15 @@ class PIT_Accountant {
             }
             if ( ! $parsed ) {
                 $errors++;
+                $failed[] = [
+                    'name'   => $name,
+                    'reason' => __( 'Nie rozpoznano wzorca nazwy pliku.', 'obsluga-dokumentow-ksiegowych' ),
+                ];
                 continue;
             }
 
             $upload_dir = wp_upload_dir();
-            $target_dir = $upload_dir['basedir'] . '/obsluga-pit/' . $parsed['tax_year'] . '/';
+            $target_dir = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/' . $parsed['tax_year'] . '/';
 
             if ( ! is_dir( $target_dir ) ) {
                 wp_mkdir_p( $target_dir );
@@ -516,10 +725,14 @@ class PIT_Accountant {
 
             if ( ! move_uploaded_file( $tmp_name, $target_path ) ) {
                 $errors++;
+                $failed[] = [
+                    'name'   => $name,
+                    'reason' => __( 'Nie udało się zapisać pliku na serwerze.', 'obsluga-dokumentow-ksiegowych' ),
+                ];
                 continue;
             }
 
-            $file_url = $upload_dir['baseurl'] . '/obsluga-pit/' . $parsed['tax_year'] . '/' . $safe_name;
+            $file_url = $upload_dir['baseurl'] . '/obsluga-dokumentow-ksiegowych/' . $parsed['tax_year'] . '/' . $safe_name;
 
             $result = $db->insert_file( [
                 'full_name' => $parsed['full_name'],
@@ -534,6 +747,10 @@ class PIT_Accountant {
                 $inserted_ids[] = $result;
             } else {
                 $errors++;
+                $failed[] = [
+                    'name'   => $name,
+                    'reason' => __( 'Błąd zapisu do bazy danych.', 'obsluga-dokumentow-ksiegowych' ),
+                ];
                 if ( file_exists( $target_path ) ) {
                     unlink( $target_path );
                 }
@@ -541,8 +758,7 @@ class PIT_Accountant {
         }
 
         if ( $uploaded > 0 ) {
-            $this->maybe_pack_zip_for_same_person_year( $db );
-            $this->fill_missing_pesel_after_upload( $db );
+            $this->fill_missing_pesel_from_db_only( $db );
         }
 
         $redirect = add_query_arg( [
@@ -550,6 +766,11 @@ class PIT_Accountant {
             'pit_errors'   => $errors,
             'pit_skipped'  => $skipped,
         ], wp_get_referer() ?: home_url() );
+
+        if ( ! empty( $failed ) ) {
+            set_transient( 'pit_upload_failed_files_' . get_current_user_id(), $failed, 60 );
+            $redirect = add_query_arg( 'pit_upload_failed', '1', $redirect );
+        }
 
         wp_redirect( esc_url_raw( $redirect ) );
         exit;
@@ -572,8 +793,8 @@ class PIT_Accountant {
         }
 
         $upload_dir = wp_upload_dir();
-        $base_dir   = $upload_dir['basedir'] . '/obsluga-pit/';
-        $base_url   = $upload_dir['baseurl'] . '/obsluga-pit/';
+        $base_dir   = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
+        $base_url   = $upload_dir['baseurl'] . '/obsluga-dokumentow-ksiegowych/';
 
         foreach ( $rows as $row ) {
             $tax_year  = (int) $row['tax_year'];
@@ -636,6 +857,19 @@ class PIT_Accountant {
     }
 
     /**
+     * Uzupełnia brakujący PESEL wyłącznie z bazy (inna pozycja tej samej osoby). Bez wywołań pdftotext.
+     */
+    private function fill_missing_pesel_from_db_only( PIT_Database $db ): void {
+        $persons = $db->get_person_ids_with_empty_pesel();
+        foreach ( $persons as $full_name ) {
+            $pesel = $db->get_pesel_by_full_name( $full_name );
+            if ( $pesel !== null ) {
+                $db->update_pesel_for_person( $full_name, $pesel );
+            }
+        }
+    }
+
+    /**
      * Uzupełnia brakujący PESEL: najpierw z bazy (inna pozycja tej osoby), potem z treści PDF.
      * Gdy w PDF jest więcej niż jeden różny PESEL – nie przypisuje, zgłasza błąd.
      */
@@ -664,13 +898,19 @@ class PIT_Accountant {
     private function extract_pesel_from_person_pdfs( string $full_name, PIT_Database $db ): ?string {
         global $wpdb;
 
+        $key  = pit_person_match_key( $full_name );
+        if ( $key === '' ) {
+            return null;
+        }
+
         $table = PIT_Database::$table_files;
-        $rows  = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT id, file_path FROM {$table} WHERE full_name = %s AND (pesel IS NULL OR pesel = '') ORDER BY id ASC",
-                $full_name
-            )
+        $all   = $wpdb->get_results(
+            "SELECT id, full_name, file_path FROM {$table} WHERE (pesel IS NULL OR pesel = '') ORDER BY id ASC",
+            OBJECT
         );
+        $rows = array_filter( $all, function ( $row ) use ( $key ) {
+            return pit_person_match_key( (string) $row->full_name ) === $key;
+        } );
 
         $found_pesels = [];
         foreach ( $rows as $row ) {
@@ -722,13 +962,13 @@ class PIT_Accountant {
      */
     public function handle_delete(): void {
         if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         $file_id = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
 
         if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'pit_delete_' . $file_id ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         $db = PIT_Database::get_instance();
@@ -744,11 +984,11 @@ class PIT_Accountant {
      */
     public function handle_bulk_delete(): void {
         if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( ! wp_verify_nonce( $_POST['pit_bulk_delete_nonce'] ?? '', 'pit_bulk_delete_nonce' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         $ids = $_POST['pit_delete_ids'] ?? [];
@@ -776,11 +1016,11 @@ class PIT_Accountant {
      */
     public function handle_set_pesel_front(): void {
         if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( ! wp_verify_nonce( $_POST['pit_set_pesel_front_nonce'] ?? '', 'pit_set_pesel_front' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         $full_name = sanitize_text_field( $_POST['pit_set_pesel_full_name'] ?? '' );
@@ -806,11 +1046,11 @@ class PIT_Accountant {
      */
     public function handle_generate_report(): void {
         if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( ! wp_verify_nonce( $_POST['pit_report_nonce'] ?? '', 'pit_report_nonce' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         $year = (int) ( $_POST['year'] ?? date( 'Y' ) );
@@ -822,11 +1062,11 @@ class PIT_Accountant {
      */
     public function handle_generate_report_pdf(): void {
         if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( ! wp_verify_nonce( $_POST['pit_report_pdf_nonce'] ?? '', 'pit_report_pdf_nonce' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         $year = (int) ( $_POST['year'] ?? date( 'Y' ) );
@@ -853,7 +1093,7 @@ class PIT_Accountant {
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Raport PIT-11 – <?php echo esc_html( $year ); ?></title>
+    <title><?php echo esc_html__( 'Raport dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?> – <?php echo esc_html( $year ); ?></title>
     <style>
         body { font-family: Georgia, 'Times New Roman', serif; max-width: 800px; margin: 40px auto; padding: 20px; }
         h1 { font-size: 24px; margin-bottom: 5px; }
@@ -876,7 +1116,7 @@ class PIT_Accountant {
         <?php if ( $company_nip ) : ?>
             <p>NIP: <?php echo esc_html( $company_nip ); ?></p>
         <?php endif; ?>
-        <h2>Raport odbioru PIT-11 za rok <?php echo esc_html( $year ); ?></h2>
+        <h2><?php echo esc_html__( 'Raport pobrania dokumentów za rok', 'obsluga-dokumentow-ksiegowych' ); ?> <?php echo esc_html( $year ); ?></h2>
         <p>Wygenerowano: <?php echo esc_html( $generated_at ); ?></p>
     </header>
 
@@ -904,7 +1144,7 @@ class PIT_Accountant {
                         <?php echo $is_downloaded ? esc_html( $row->downloaded_at ) : '—'; ?>
                     </td>
                     <td class="<?php echo $is_downloaded ? 'downloaded' : ''; ?>">
-                        <?php echo $is_downloaded ? esc_html__( 'Pobrano', 'obsluga-pit' ) : esc_html__( 'Nie pobrano', 'obsluga-pit' ); ?>
+                        <?php echo $is_downloaded ? esc_html__( 'Pobrano', 'obsluga-dokumentow-ksiegowych' ) : esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -912,7 +1152,7 @@ class PIT_Accountant {
     </table>
 
     <footer>
-        <p>Dokument wygenerowany przez PIT Manager</p>
+        <p><?php echo esc_html__( 'Dokument wygenerowany przez Obsługa dokumentów księgowych', 'obsluga-dokumentow-ksiegowych' ); ?></p>
     </footer>
 </body>
 </html>
@@ -921,7 +1161,7 @@ class PIT_Accountant {
         $html = ob_get_clean();
 
         header( 'Content-Type: text/html; charset=UTF-8' );
-        header( 'Content-Disposition: attachment; filename="raport-pit11-' . $year . '.html"' );
+        header( 'Content-Disposition: attachment; filename="raport-dokumentow-' . $year . '.html"' );
         echo $html;
         exit;
     }
@@ -946,7 +1186,7 @@ class PIT_Accountant {
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Raport PIT-11</title>
+    <title><?php echo esc_attr__( 'Raport dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?></title>
     <style>
         @media print {
             body { margin: 0; }
@@ -968,7 +1208,7 @@ class PIT_Accountant {
 <body>
     <div class="no-print print-btn">
         <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
-            <?php esc_html_e( 'Drukuj / Zapisz jako PDF', 'obsluga-pit' ); ?>
+            <?php esc_html_e( 'Drukuj / Zapisz jako PDF', 'obsluga-dokumentow-ksiegowych' ); ?>
         </button>
     </div>
 
@@ -980,7 +1220,7 @@ class PIT_Accountant {
         <?php if ( $company_nip ) : ?>
             <p>NIP: <?php echo esc_html( $company_nip ); ?></p>
         <?php endif; ?>
-        <h2>Raport odbioru PIT-11<?php echo $year > 0 ? ' za rok ' . esc_html( $year ) : ''; ?></h2>
+        <h2><?php echo esc_html__( 'Raport pobrania dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?><?php echo $year > 0 ? ' ' . esc_html__( 'za rok', 'obsluga-dokumentow-ksiegowych' ) . ' ' . esc_html( $year ) : ''; ?></h2>
         <p>Wygenerowano: <?php echo esc_html( $generated_at ); ?></p>
     </header>
 
@@ -1014,7 +1254,7 @@ class PIT_Accountant {
                         <?php echo $is_downloaded ? esc_html( $row->downloaded_at ) : '—'; ?>
                     </td>
                     <td class="<?php echo $is_downloaded ? 'downloaded' : ''; ?>">
-                        <?php echo $is_downloaded ? esc_html__( 'Pobrano', 'obsluga-pit' ) : esc_html__( 'Nie pobrano', 'obsluga-pit' ); ?>
+                        <?php echo $is_downloaded ? esc_html__( 'Pobrano', 'obsluga-dokumentow-ksiegowych' ) : esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -1022,7 +1262,7 @@ class PIT_Accountant {
     </table>
 
     <footer>
-        <p>Dokument wygenerowany przez Obsługa PIT</p>
+        <p><?php echo esc_html__( 'Dokument wygenerowany przez Obsługa dokumentów księgowych', 'obsluga-dokumentow-ksiegowych' ); ?></p>
     </footer>
 </body>
 </html>

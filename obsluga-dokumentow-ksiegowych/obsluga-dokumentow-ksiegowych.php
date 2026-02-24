@@ -1,12 +1,12 @@
 <?php
 /**
- * Plugin Name: Obsługa PIT
- * Plugin URI:  https://example.com/obsluga-pit
- * Description: Wtyczka umożliwia księgowym wgrywanie plików PDF PIT-11, a podatnikom ich pobieranie po weryfikacji danych osobowych.
+ * Plugin Name: Obsługa dokumentów księgowych
+ * Plugin URI:  https://example.com/obsluga-dokumentow-ksiegowych
+ * Description: Wtyczka umożliwia księgowym wgrywanie dokumentów księgowych, a podatnikom ich pobieranie po weryfikacji danych osobowych.
  * Version:     1.0.0
  * Author:      Tomasz Kalinowski
  * Author URI:  https://example.com
- * Text Domain: obsluga-pit
+ * Text Domain: obsluga-dokumentow-ksiegowych
  * Domain Path: /languages
  * License:     GPL-2.0+
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -61,14 +61,24 @@ function pit_activate_plugin(): void {
         add_option( 'pit_client_page_url', home_url( '/podatnik' ) );
     }
     if ( get_option( 'pit_filename_filters' ) === false ) {
-        add_option( 'pit_filename_filters', [
-            'Nazwisko Imię*PIT-11*NNNN',
-            'Informacja roczna*Nazwisko Imię',
-        ] );
+        add_option( 'pit_filename_filters', pit_get_default_filename_filters() );
     }
 
     // Zapisz wersję wtyczki
     update_option( 'pit_version', PIT_VERSION );
+}
+
+/**
+ * Zwraca domyślne filtry nazw plików.
+ *
+ * @return string[]
+ */
+function pit_get_default_filename_filters(): array {
+	return [
+		'{NAZWISKO}/ /{IMIĘ}/ - PIT-11 (29) - rok /{RRRR}/.pdf/',
+		'/Informacja roczna dla /{NAZWISKO}/ /{IMIĘ}/.pdf/',
+		'/PIT-11_rok_/{RRRR}/_/{IMIĘ}/_/{NAZWISKO}/_/{PPPPPPPPPPP}/.pdf/',
+	];
 }
 
 /**
@@ -87,6 +97,20 @@ function pit_get_upload_dir(): string {
 function pit_normalize_full_name( string $full_name ): string {
     $s = trim( preg_replace( '/\s+/', ' ', $full_name ) );
     return $s;
+}
+
+/**
+ * Klucz do uznawania „tej samej osoby” przy szukaniu PESEL (np. „Ambrozik Ewelina 29” i „dla Ambrozik Ewelina” → ta sama osoba).
+ *
+ * @param string $full_name Imię i nazwisko z bazy lub formularza.
+ * @return string Klucz do porównań.
+ */
+function pit_person_match_key( string $full_name ): string {
+    $s = pit_normalize_full_name( $full_name );
+    $s = preg_replace( '/^dla\s+/iu', '', $s );
+    $s = preg_replace( '/\s*\(\s*29\s*\)\s*$/', '', $s );
+    $s = preg_replace( '/\s*29\s*$/', '', $s );
+    return pit_normalize_full_name( $s );
 }
 
 /**
@@ -172,7 +196,7 @@ function pit_init_plugin(): void {
 	PIT_Accountant::get_instance();
 	PIT_Client::get_instance();
 
-	load_plugin_textdomain( 'obsluga-pit', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+	load_plugin_textdomain( 'obsluga-dokumentow-ksiegowych', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 
 	pit_sync_files();
 }
@@ -192,8 +216,8 @@ add_action( 'plugins_loaded', 'pit_init_plugin' );
 function pit_plugin_action_links( array $links ): array {
     $settings_link = sprintf(
         '<a href="%s">%s</a>',
-        esc_url( admin_url( 'admin.php?page=obsluga-pit-settings' ) ),
-        esc_html__( 'Ustawienia', 'obsluga-pit' )
+        esc_url( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) ),
+        esc_html__( 'Settings', 'obsluga-dokumentow-ksiegowych' )
     );
     array_unshift( $links, $settings_link );
     return $links;

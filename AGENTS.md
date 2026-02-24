@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-**Obsługa PIT** is a WordPress plugin for managing PIT-11 tax documents. It allows accountants to upload PDF files and taxpayers to download them after identity verification.
+**Obsługa dokumentów księgowych** is a WordPress plugin for managing PIT-11 tax documents. It allows accountants to upload PDF files and taxpayers to download them after identity verification.
 
 ### Directory Structure
 ```
-obsluga-pit/
-├── obsluga-pit.php       # Main plugin file (entry point)
+obsluga-dokumentow-ksiegowych/
+├── obsluga-dokumentow-ksiegowych.php       # Main plugin file (entry point)
 ├── uninstall.php         # Plugin uninstall handler
 ├── readme.txt            # WordPress plugin readme
 ├── assets/
@@ -26,25 +26,25 @@ This is a WordPress plugin - no build step required. For development:
 
 ```bash
 # Create installable ZIP
-zip -r obsluga-pit.zip obsluga-pit -x "*.git*"
+zip -r obsluga-dokumentow-ksiegowych.zip obsluga-dokumentow-ksiegowych -x "*.git*"
 
 # PHP syntax check (single file)
-php -l obsluga-pit/includes/class-database.php
+php -l obsluga-dokumentow-ksiegowych/includes/class-database.php
 
 # PHP syntax check (all files)
-find obsluga-pit -name "*.php" -exec php -l {} \;
+find obsluga-dokumentow-ksiegowych -name "*.php" -exec php -l {} \;
 
 # WordPress coding standards (if phpcs installed)
-phpcs --standard=WordPress obsluga-pit/
+phpcs --standard=WordPress obsluga-dokumentow-ksiegowych/
 
 # Fix coding standards automatically
-phpcbf --standard=WordPress obsluga-pit/
+phpcbf --standard=WordPress obsluga-dokumentow-ksiegowych/
 ```
 
 ### Testing in WordPress
 1. Upload ZIP via Plugins > Add New > Upload Plugin
 2. Activate the plugin
-3. Configure at Tools > Obsługa PIT
+3. Configure at Tools > Obsługa dokumentów księgowych
 4. Create pages with shortcodes: `[pit_accountant_panel]` and `[pit_client_page]`
 
 ## Code Style Guidelines
@@ -120,7 +120,7 @@ public static function get_instance(): self {
 
 ### WordPress Functions
 - Always escape output: `esc_html()`, `esc_attr()`, `esc_url()`
-- Use `__()` and `esc_html_e()` for translations with text domain `obsluga-pit`
+- Use `__()` and `esc_html_e()` for translations with text domain `obsluga-dokumentow-ksiegowych`
 - Sanitize input: `sanitize_text_field()`, `(int)`, `absint()`
 - Use nonces for forms: `wp_nonce_field()`, `wp_verify_nonce()`
 - Use `$wpdb->prepare()` for SQL queries
@@ -175,11 +175,11 @@ Use CSS custom properties in `:root`:
 
 ```php
 if ( ! $this->check_access() ) {
-    wp_die( __( 'Brak uprawnień.', 'obsluga-pit' ) );
+    wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
 }
 
 if ( ! wp_verify_nonce( $_POST['pit_nonce'] ?? '', 'pit_action' ) ) {
-    wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-pit' ) );
+    wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
 }
 ```
 
@@ -202,8 +202,8 @@ $wpdb->get_results(
 
 ## Important Notes
 
-1. **Text Domain**: Always use `'obsluga-pit'` for translations
-2. **Uploads**: Files stored in `wp-content/plugins/obsluga-pit/uploads/`
+1. **Text Domain**: Always use `'obsluga-dokumentow-ksiegowych'` for translations
+2. **Uploads**: Files stored in `wp-content/plugins/obsluga-dokumentow-ksiegowych/uploads/`
 3. **Shortcodes**: `[pit_accountant_panel]` for accountants, `[pit_client_page]` for taxpayers
 4. **Capabilities**: Custom capability `pit_upload_documents` for accountants
 5. **Uninstall**: Uses `uninstall.php` (not `register_uninstall_hook`)
