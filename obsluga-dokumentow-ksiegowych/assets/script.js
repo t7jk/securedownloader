@@ -252,6 +252,26 @@
         var $panel = $('.pit-accountant-panel');
         if ($panel.length === 0) return;
 
+        var validTabs = ['lista', 'upload', 'wzorce', 'dane-firmy'];
+
+        function switchToTab(tabId) {
+            if (!tabId || validTabs.indexOf(tabId) === -1) return;
+            $('.pit-tab').removeClass('active').attr('aria-selected', 'false');
+            $('.pit-tab-panel').removeClass('active').attr('hidden', true);
+            var $btn = $('.pit-tab[data-pit-tab="' + tabId + '"]');
+            var $target = $('#pit-tab-' + tabId);
+            if ($btn.length && $target.length) {
+                $btn.addClass('active').attr('aria-selected', 'true');
+                $target.addClass('active').removeAttr('hidden');
+            }
+        }
+
+        var params = new URLSearchParams(window.location.search);
+        var pitTab = params.get('pit_tab');
+        if (pitTab) {
+            switchToTab(pitTab);
+        }
+
         $(document).on('click', '.pit-tab', function(e) {
             e.preventDefault();
             var tabId = $(this).data('pit-tab');
