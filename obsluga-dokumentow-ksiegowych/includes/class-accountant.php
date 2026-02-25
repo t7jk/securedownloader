@@ -459,6 +459,10 @@ class PIT_Accountant {
      */
     public function render_shortcode(): string {
         if ( ! get_option( 'pit_enabled', 1 ) ) {
+            // Na produkcji pusty ekran często wynika z wyłączonej wtyczki – pokaż komunikat (zwł. dla admina)
+            if ( current_user_can( 'manage_options' ) ) {
+                return '<p class="pit-error">' . esc_html__( 'Wtyczka „Obsługa dokumentów księgowych” jest wyłączona. Włącz ją w Narzędzia → Obsługa dokumentów księgowych (przełącznik „Włącz pobieranie”).', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
+            }
             return '';
         }
 
