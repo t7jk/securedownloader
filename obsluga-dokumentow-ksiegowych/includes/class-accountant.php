@@ -28,6 +28,16 @@ class PIT_Accountant {
         add_action( 'admin_post_nopriv_pit_bulk_delete_files', [ $this, 'handle_bulk_delete' ] );
         add_action( 'admin_post_pit_set_pesel_front', [ $this, 'handle_set_pesel_front' ] );
         add_action( 'admin_post_nopriv_pit_set_pesel_front', [ $this, 'handle_set_pesel_front' ] );
+        add_action( 'admin_post_pit_save_filename_filters', [ $this, 'handle_save_filename_filters' ] );
+        add_action( 'admin_post_nopriv_pit_save_filename_filters', [ $this, 'handle_save_filename_filters' ] );
+        add_action( 'admin_post_pit_save_company_data', [ $this, 'handle_save_company_data' ] );
+        add_action( 'admin_post_nopriv_pit_save_company_data', [ $this, 'handle_save_company_data' ] );
+        add_action( 'admin_post_pit_import_pesel_list_panel', [ $this, 'handle_import_pesel_list_panel' ] );
+        add_action( 'admin_post_nopriv_pit_import_pesel_list_panel', [ $this, 'handle_import_pesel_list_panel' ] );
+        add_action( 'admin_post_pit_save_pesel_search_rule', [ $this, 'handle_save_pesel_search_rule' ] );
+        add_action( 'admin_post_nopriv_pit_save_pesel_search_rule', [ $this, 'handle_save_pesel_search_rule' ] );
+        add_action( 'admin_post_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
+        add_action( 'admin_post_nopriv_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
     }
 
     /**
@@ -93,6 +103,11 @@ class PIT_Accountant {
      */
     private function parse_filename_brace_filter( string $filename, string $filter ): array|false {
         if ( strpos( $filter, '{' ) === false || strpos( $filter, '/' ) === false ) {
+            return false;
+        }
+        $filename = trim( $filename );
+        $filename = basename( $filename );
+        if ( $filename === '' ) {
             return false;
         }
         $tokens = [];
@@ -345,6 +360,40 @@ class PIT_Accountant {
     }
 
     /**
+     * Zwraca reguły wyszukiwania numeru (PESEL) w dokumentach – tabela: szukany_numer, nazwa_naglowka, nazwa_sekcji, nr_pola.
+     *
+     * @return array<int, array{szukany_numer: string, nazwa_naglowka: string, nazwa_sekcji: string, nr_pola: string}>
+     */
+    private function get_pesel_search_rules_option(): array {
+        $default = [
+            [ 'szukany_numer' => 'PESEL', 'nazwa_naglowka' => 'PIT-11', 'nazwa_sekcji' => 'C', 'nr_pola' => '12' ],
+            [ 'szukany_numer' => 'PESEL', 'nazwa_naglowka' => 'Informacja roczna dla osoby ubezpieczonej', 'nazwa_sekcji' => 'Dane osoby ubezpieczonej', 'nr_pola' => 'Identyfikator' ],
+        ];
+        $raw = get_option( 'pit_pesel_search_rules', null );
+        if ( is_array( $raw ) && ! empty( $raw ) ) {
+            $out = [];
+            foreach ( $raw as $row ) {
+                if ( ! is_array( $row ) ) {
+                    continue;
+                }
+                $out[] = [
+                    'szukany_numer'   => isset( $row['szukany_numer'] ) ? sanitize_text_field( (string) $row['szukany_numer'] ) : '',
+                    'nazwa_naglowka'  => isset( $row['nazwa_naglowka'] ) ? sanitize_text_field( (string) $row['nazwa_naglowka'] ) : '',
+                    'nazwa_sekcji'    => isset( $row['nazwa_sekcji'] ) ? sanitize_text_field( (string) $row['nazwa_sekcji'] ) : '',
+                    'nr_pola'         => isset( $row['nr_pola'] ) ? sanitize_text_field( (string) $row['nr_pola'] ) : '',
+                ];
+            }
+            $out = array_values( array_filter( $out, function ( $r ) {
+                return $r['nazwa_naglowka'] !== '' || $r['nazwa_sekcji'] !== '' || $r['nr_pola'] !== '';
+            } ) );
+            if ( ! empty( $out ) ) {
+                return $out;
+            }
+        }
+        return $default;
+    }
+
+    /**
      * Sprawdza dostęp użytkownika do panelu księgowego.
      *
      * @return bool True jeśli użytkownik ma dostęp.
@@ -391,10 +440,14 @@ class PIT_Accountant {
             );
 
             wp_localize_script( 'obsluga-dokumentow-ksiegowych-script', 'pitManager', [
-                'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
-                'nonce'         => wp_create_nonce( 'pit_manager_nonce' ),
-                'confirmDelete' => __( 'Czy na pewno usunąć ten dokument?', 'obsluga-dokumentow-ksiegowych' ),
-                'errorPesel'    => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
+                'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
+                'uploadPostUrl'    => admin_url( 'admin-post.php' ),
+                'uploadChunkSize'  => (int) PIT_UPLOAD_CHUNK_SIZE,
+                'uploadProgressLabel' => __( 'Wgrywanie pliku %1$s z %2$s', 'obsluga-dokumentow-ksiegowych' ),
+                'nonce'            => wp_create_nonce( 'pit_manager_nonce' ),
+                'confirmDelete'      => __( 'Czy na pewno usunąć ten dokument?', 'obsluga-dokumentow-ksiegowych' ),
+                'confirmBulkDelete'  => __( 'Czy na pewno usunąć zaznaczone dokumenty?', 'obsluga-dokumentow-ksiegowych' ),
+                'errorPesel'       => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
             ] );
         }
     }
@@ -456,12 +509,41 @@ class PIT_Accountant {
                 $count
             );
         }
+        if ( isset( $_GET['pit_downloaded_deleted'] ) ) {
+            $count = (int) $_GET['pit_downloaded_deleted'];
+            $message = sprintf(
+                _n( 'Usunięto %d pobrany dokument z serwera.', 'Usunięto %d pobranych dokumentów z serwera.', $count, 'obsluga-dokumentow-ksiegowych' ),
+                $count
+            );
+        }
         if ( isset( $_GET['pit_set_pesel_ok'] ) && $_GET['pit_set_pesel_ok'] === '1' ) {
             $message = __( 'PESEL został zapisany.', 'obsluga-dokumentow-ksiegowych' );
         }
         if ( isset( $_GET['pit_set_pesel_error'] ) && $_GET['pit_set_pesel_error'] === '1' ) {
             $message       = __( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'obsluga-dokumentow-ksiegowych' );
             $message_class = 'pit-error';
+        }
+        if ( isset( $_GET['pit_filters_saved'] ) && $_GET['pit_filters_saved'] === '1' ) {
+            $message = __( 'Filtry nazw plików zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
+        }
+        if ( isset( $_GET['pit_company_saved'] ) && $_GET['pit_company_saved'] === '1' ) {
+            $message = __( 'Dane firmy zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
+        }
+        if ( isset( $_GET['pit_import_updated'] ) || isset( $_GET['pit_import_skipped'] ) ) {
+            $updated = (int) ( $_GET['pit_import_updated'] ?? 0 );
+            $skipped = (int) ( $_GET['pit_import_skipped'] ?? 0 );
+            $message = sprintf(
+                __( 'Import PESEL: zaktualizowano %d, pominięto %d.', 'obsluga-dokumentow-ksiegowych' ),
+                $updated,
+                $skipped
+            );
+        }
+        if ( isset( $_GET['pit_import_error'] ) && $_GET['pit_import_error'] === '1' ) {
+            $message       = __( 'Błąd odczytu pliku.', 'obsluga-dokumentow-ksiegowych' );
+            $message_class = 'pit-error';
+        }
+        if ( isset( $_GET['pit_pesel_rule_saved'] ) && $_GET['pit_pesel_rule_saved'] === '1' ) {
+            $message = __( 'Reguły wyszukiwania PESEL w dokumencie PIT zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
         }
 
         $db = PIT_Database::get_instance();
@@ -494,31 +576,40 @@ class PIT_Accountant {
 
             <nav class="pit-tabs" role="tablist" aria-label="<?php esc_attr_e( 'Zakładki panelu', 'obsluga-dokumentow-ksiegowych' ); ?>">
                 <button type="button" class="pit-tab active" role="tab" id="pit-tab-btn-lista" aria-selected="true" aria-controls="pit-tab-lista" data-pit-tab="lista">
-                    <?php esc_html_e( 'Lista dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?>
+                    <?php esc_html_e( 'Dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
                 <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-upload" aria-selected="false" aria-controls="pit-tab-upload" data-pit-tab="upload">
-                    <?php esc_html_e( 'Wgraj dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
+                    <?php esc_html_e( 'Wgrywanie', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
                 <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-raport" aria-selected="false" aria-controls="pit-tab-raport" data-pit-tab="raport">
-                    <?php esc_html_e( 'Generuj raport', 'obsluga-dokumentow-ksiegowych' ); ?>
+                    <?php esc_html_e( 'Raport', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </button>
+                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-filtry" aria-selected="false" aria-controls="pit-tab-filtry" data-pit-tab="filtry">
+                    <?php esc_html_e( 'Filtry', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </button>
+                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-dane-firmy" aria-selected="false" aria-controls="pit-tab-dane-firmy" data-pit-tab="dane-firmy">
+                    <?php esc_html_e( 'Firma', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </button>
+                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-pesel" aria-selected="false" aria-controls="pit-tab-pesel" data-pit-tab="pesel">
+                    <?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
             </nav>
 
             <div id="pit-tab-lista" class="pit-tab-panel active" role="tabpanel" aria-labelledby="pit-tab-btn-lista">
-                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Lista dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
 
                 <div id="pit-pesel-form-data" style="display:none;" data-nonce="<?php echo esc_attr( wp_create_nonce( 'pit_set_pesel_front' ) ); ?>" data-url="<?php echo esc_attr( admin_url( 'admin-post.php' ) ); ?>"></div>
 
                 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-bulk-delete-form">
                 <?php wp_nonce_field( 'pit_bulk_delete_nonce', 'pit_bulk_delete_nonce' ); ?>
                 <input type="hidden" name="action" value="pit_bulk_delete_files">
+                <input type="hidden" name="pit_delete_ids_csv" id="pit-delete-ids-csv" value="">
 
                 <table class="wp-list-table widefat fixed striped" id="pit-files-table">
                     <thead>
                         <tr>
                             <th><input type="checkbox" id="pit-select-all"></th>
-                            <th><?php esc_html_e( 'Lp.', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                            <th class="sortable" data-sort="name"><?php esc_html_e( 'Imię i nazwisko', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
+                            <th class="sortable" data-sort="name"><?php esc_html_e( 'Nazwisko i imię', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
                             <th class="sortable" data-sort="pesel"><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
                             <th class="sortable" data-sort="year"><?php esc_html_e( 'Rok', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
                             <th class="sortable" data-sort="date"><?php esc_html_e( 'Data pobrania', 'obsluga-dokumentow-ksiegowych' ); ?> <span class="sort-icon">↕</span></th>
@@ -527,38 +618,70 @@ class PIT_Accountant {
                     <tbody>
                         <?php if ( empty( $files ) ) : ?>
                             <tr>
-                                <td colspan="6"><?php esc_html_e( 'Brak dokumentów.', 'obsluga-dokumentow-ksiegowych' ); ?></td>
+                                <td colspan="5"><?php esc_html_e( 'Brak dokumentów.', 'obsluga-dokumentow-ksiegowych' ); ?></td>
                             </tr>
                         <?php else : ?>
-                            <?php $i = 1; foreach ( $files as $file ) : 
-                                $is_downloaded = ! empty( $file->last_download );
+                            <?php
+                            $groups = [];
+                            foreach ( $files as $file ) {
+                                $key = pit_person_match_key( (string) ( $file->full_name ?? '' ) );
+                                if ( $key === '' ) {
+                                    $key = 'file_' . (int) $file->id;
+                                }
+                                if ( ! isset( $groups[ $key ] ) ) {
+                                    $groups[ $key ] = [];
+                                }
+                                $groups[ $key ][] = $file;
+                            }
+                            foreach ( $groups as $group ) :
+                                $first   = $group[0];
+                                $ids     = array_map( function ( $f ) { return (int) $f->id; }, $group );
+                                $pesel   = $first->pesel ?? '';
+                                $pesel_empty = ( $pesel === '' || $pesel === null );
+                                $years   = array_unique( array_map( function ( $f ) { return (int) $f->tax_year; }, $group ) );
+                                sort( $years );
+                                $last_dl = '';
+                                $all_downloaded = true;
+                                foreach ( $group as $f ) {
+                                    if ( empty( $f->last_download ) ) {
+                                        $all_downloaded = false;
+                                    } elseif ( $last_dl === '' || strcmp( (string) $f->last_download, $last_dl ) > 0 ) {
+                                        $last_dl = $f->last_download;
+                                    }
+                                }
+                                $is_downloaded = $all_downloaded;
                             ?>
                                 <tr class="<?php echo $is_downloaded ? '' : 'pit-not-downloaded'; ?>">
-                                    <td><input type="checkbox" name="pit_delete_ids[]" value="<?php echo esc_attr( $file->id ); ?>" class="pit-checkbox"></td>
-                                    <td class="pit-lp"><?php echo $i++; ?></td>
-                                    <td data-name="<?php echo esc_attr( $file->full_name ); ?>"><?php echo esc_html( $file->full_name ); ?></td>
-                                    <td data-pesel="<?php echo esc_attr( $file->pesel ?? '' ); ?>">
-                                        <?php
-                                        $pesel_empty = ( $file->pesel === '' || $file->pesel === null );
-                                        if ( $pesel_empty ) :
-                                            ?>
+                                    <td><input type="checkbox" class="pit-checkbox" value="<?php echo esc_attr( implode( ',', $ids ) ); ?>" data-pit-id="<?php echo esc_attr( implode( ',', $ids ) ); ?>"></td>
+                                    <td data-name="<?php echo esc_attr( $first->full_name ); ?>">
+                                        <strong style="font-weight:700;text-transform:uppercase;"><?php echo esc_html( function_exists( 'mb_strtoupper' ) ? mb_strtoupper( (string) $first->full_name, 'UTF-8' ) : strtoupper( (string) $first->full_name ) ); ?></strong>
+                                        <div style="margin-top:5px;line-height:1.0;">
+                                        <?php foreach ( $group as $f ) : ?>
+                                            <?php if ( ! empty( $f->file_path ) ) : ?>
+                                                <span style="font-size:0.85em;color:#666;display:block;line-height:1.0;font-weight:400;"><?php echo esc_html( strtolower( basename( $f->file_path ) ) ); ?></span>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                        </div>
+                                    </td>
+                                    <td data-pesel="<?php echo esc_attr( $pesel ); ?>">
+                                        <?php if ( $pesel_empty ) : ?>
                                             <span class="pit-pesel-cell-empty">
-                                                <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Brak PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></a>
-                                                <span class="pit-set-pesel-form" style="display:none;" data-full-name="<?php echo esc_attr( $file->full_name ); ?>">
+                                                <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Nie dopasowano', 'obsluga-dokumentow-ksiegowych' ); ?></a>
+                                                <span class="pit-set-pesel-form" style="display:none;" data-full-name="<?php echo esc_attr( $first->full_name ); ?>">
                                                     <input type="text" class="pit-set-pesel-value" placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-dokumentow-ksiegowych' ); ?>" maxlength="11" pattern="\d{11}" size="11">
                                                     <button type="button" class="pit-set-pesel-save button button-small"><?php esc_html_e( 'Zapisz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                                                 </span>
                                             </span>
                                         <?php else : ?>
-                                            <?php echo esc_html( substr( (string) $file->pesel, 0, 4 ) . '....' . substr( (string) $file->pesel, 8, 3 ) ); ?>
+                                            <?php echo esc_html( (string) $pesel ); ?>
                                         <?php endif; ?>
                                     </td>
-                                    <td data-year="<?php echo esc_attr( $file->tax_year ); ?>"><?php echo esc_html( $file->tax_year ); ?></td>
-                                    <td data-date="<?php echo $is_downloaded ? esc_attr( $file->last_download ) : ''; ?>">
-                                        <?php 
-                                        echo $is_downloaded 
-                                            ? esc_html( $file->last_download ) 
-                                            : '<em>' . esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ) . '</em>'; 
+                                    <td data-year="<?php echo esc_attr( implode( ', ', $years ) ); ?>"><?php echo esc_html( implode( ', ', $years ) ); ?></td>
+                                    <td data-date="<?php echo esc_attr( $last_dl ); ?>">
+                                        <?php
+                                        echo $is_downloaded
+                                            ? esc_html( $last_dl )
+                                            : '<em>' . esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ) . '</em>';
                                         ?>
                                     </td>
                                 </tr>
@@ -568,49 +691,295 @@ class PIT_Accountant {
                 </table>
 
                 <div class="pit-form-row" id="pit-bulk-actions" style="display:none; margin-top: 10px;">
-                    <button type="submit" class="button button-link-delete" onclick="return confirm('<?php esc_attr_e( 'Czy na pewno usunąć zaznaczone dokumenty?', 'obsluga-dokumentow-ksiegowych' ); ?>')">
+                    <button type="button" class="button button-link-delete" id="pit-bulk-delete-btn">
                         <?php esc_html_e( 'Usuń zaznaczone', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </button>
                     <span id="pit-selected-count"></span>
                 </div>
             </form>
+
+                <div class="pit-form-row pit-delete-downloaded-row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--pit-border, #ddd);">
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-delete-downloaded-form" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno usunąć z serwera wszystkie pliki, które zostały już pobrane? Tej operacji nie można cofnąć.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
+                        <?php wp_nonce_field( 'pit_delete_downloaded_files', 'pit_delete_downloaded_nonce' ); ?>
+                        <input type="hidden" name="action" value="pit_delete_downloaded_files">
+                        <button type="submit" class="button pit-btn-delete-downloaded">
+                            <?php esc_html_e( 'Usuń pobrane', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        </button>
+                    </form>
+                </div>
+            <script>
+            (function() {
+                var btn = document.getElementById('pit-bulk-delete-btn');
+                if (!btn) return;
+                btn.addEventListener('click', function() {
+                    var form = document.getElementById('pit-bulk-delete-form');
+                    if (!form) return;
+                    var checked = form.querySelectorAll('.pit-checkbox:checked');
+                    var ids = [];
+                    for (var i = 0; i < checked.length; i++) { ids.push(checked[i].value); }
+                    if (ids.length === 0) return;
+                    if (!confirm(<?php echo wp_json_encode( __( 'Czy na pewno usunąć zaznaczone dokumenty?', 'obsluga-dokumentow-ksiegowych' ) ); ?>)) return;
+                    var input = form.querySelector('input[name="pit_delete_ids_csv"]');
+                    if (input) input.value = ids.join(',');
+                    form.submit();
+                });
+            })();
+            </script>
             </div>
 
             <div id="pit-tab-upload" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-upload" hidden>
-                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Wgraj dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Wgrywanie', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
                 <p class="description">
+                    <?php esc_html_e( 'Możesz wgrać 1 lub więcej dokumentów jednocześnie.', 'obsluga-dokumentow-ksiegowych' ); ?>
                     <?php
-                    $filters = get_option( 'pit_filename_filters', [] );
-                    if ( ! empty( $filters ) && is_array( $filters ) ) {
-                        esc_html_e( 'Aktywne filtry:', 'obsluga-dokumentow-ksiegowych' );
-                        echo '<br>';
-                        foreach ( array_slice( $filters, 0, 10 ) as $filter ) {
-                            echo '<strong>' . esc_html( $filter ) . '</strong><br>';
-                        }
+                    $max_files = (int) ini_get( 'max_file_uploads' );
+                    $post_max  = ini_get( 'post_max_size' );
+                    if ( $max_files > 0 || $post_max ) {
+                        echo '<br><span class="pit-upload-limits">';
+                        printf(
+                            /* translators: 1: max number of files, 2: post_max_size (e.g. 8M) */
+                            esc_html__( 'Limit PHP: max %1$s plików jednocześnie, łącznie do %2$s.', 'obsluga-dokumentow-ksiegowych' ),
+                            $max_files > 0 ? (string) $max_files : '?',
+                            $post_max ? esc_html( $post_max ) : '?'
+                        );
+                        echo '</span>';
                     }
                     ?>
-                    <br>
-                    <?php esc_html_e( 'Możesz wgrać 1 lub więcej dokumentów jednocześnie.', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </p>
 
-                <form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                <form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-upload-form" data-upload-url="<?php echo esc_attr( admin_url( 'admin-post.php' ) ); ?>">
                     <?php wp_nonce_field( 'pit_upload_nonce', 'pit_nonce' ); ?>
                     <input type="hidden" name="action" value="pit_upload_files">
 
                     <div class="pit-form-row">
-                        <input type="file" name="pit_pdfs[]" multiple accept=".pdf" required>
+                        <input type="file" name="pit_pdfs[]" multiple accept=".pdf" required id="pit-upload-files">
                     </div>
 
+                    <div class="pit-form-row pit-upload-progress-wrap" id="pit-upload-progress-wrap" style="display:none;">
+                        <div class="pit-upload-progress" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                            <div class="pit-upload-progress-bar" id="pit-upload-progress-bar" style="width:0%;"></div>
+                        </div>
+                        <span class="pit-upload-progress-text" id="pit-upload-progress-text"></span>
+                    </div>
                     <div class="pit-form-row">
-                        <button type="submit" class="button button-primary">
+                        <button type="submit" class="button button-primary" id="pit-upload-submit">
                             <?php esc_html_e( 'Wgraj dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
                         </button>
                     </div>
                 </form>
+            <script>
+            (function() {
+                var form = document.getElementById('pit-upload-form');
+                var fileInput = document.getElementById('pit-upload-files');
+                var progressWrap = document.getElementById('pit-upload-progress-wrap');
+                var progressBar = document.getElementById('pit-upload-progress-bar');
+                var progressText = document.getElementById('pit-upload-progress-text');
+                var submitBtn = document.getElementById('pit-upload-submit');
+                if (!form || !fileInput) return;
+                var uploadUrl = form.getAttribute('data-upload-url') || form.action;
+                form.addEventListener('submit', function(e) {
+                    var files = fileInput.files;
+                    if (!files || files.length === 0) return true;
+                    e.preventDefault();
+                    var nonceEl = form.querySelector('input[name="pit_nonce"]');
+                    if (!nonceEl || !nonceEl.value) { alert('Błąd: brak nonce.'); return false; }
+                    var total = files.length;
+                    var current = 0;
+                    if (progressWrap) progressWrap.style.display = '';
+                    if (submitBtn) submitBtn.disabled = true;
+                    if (progressBar) progressBar.style.width = '0%';
+                    function updateProgress(n, ofTotal) {
+                        var pct = ofTotal > 0 ? Math.round((n / ofTotal) * 100) : 0;
+                        if (progressBar) progressBar.style.width = pct + '%';
+                        if (progressText) progressText.textContent = 'Wgrywanie pliku ' + n + ' z ' + ofTotal;
+                    }
+                    function sendNext() {
+                        if (current >= total) {
+                            if (progressWrap) progressWrap.style.display = 'none';
+                            if (submitBtn) submitBtn.disabled = false;
+                            return;
+                        }
+                        updateProgress(current + 1, total);
+                        var fd = new FormData();
+                        fd.append('pit_nonce', nonceEl.value);
+                        fd.append('action', 'pit_upload_files');
+                        fd.append('pit_upload_chunk_index', String(current));
+                        fd.append('pit_upload_total_chunks', String(total));
+                        fd.append('pit_pdfs[]', files[current]);
+                        fetch(uploadUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                if (data && data.success && data.data && data.data.done === true && data.data.redirect_url) {
+                                    window.location.href = data.data.redirect_url;
+                                    return;
+                                }
+                                current++;
+                                sendNext();
+                            })
+                            .catch(function(err) {
+                                if (progressText) progressText.textContent = 'Błąd: ' + (err.message || 'nieznany');
+                                if (progressWrap) progressWrap.style.display = '';
+                                if (submitBtn) submitBtn.disabled = false;
+                            });
+                    }
+                    sendNext();
+                    return false;
+                });
+            })();
+            </script>
+            </div>
+
+            <div id="pit-tab-filtry" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-filtry" hidden>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Filtry', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <p class="description"><?php esc_html_e( 'Format nazwy pliku', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                    <?php wp_nonce_field( 'pit_save_filename_filters', 'pit_filename_filters_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_save_filename_filters">
+                    <?php
+                    $filters_value = get_option( 'pit_filename_filters', [] );
+                    if ( ! is_array( $filters_value ) ) {
+                        $filters_value = [];
+                    }
+                    $filters_text = implode( "\n", $filters_value );
+                    ?>
+                    <div class="pit-form-row">
+                        <textarea name="pit_filename_filters" id="pit_filename_filters" rows="6" class="large-text code" placeholder="NAZWISKO IMIĘ*PIT-11*RRRR"><?php echo esc_textarea( $filters_text ); ?></textarea>
+                    </div>
+                    <p class="description"><?php esc_html_e( 'Lista rekordów (jeden w każdej linii). Znak * zastępuje dowolny ciąg znaków z wyłączeniem placeholderów: RRRR (rok), NAZWISKO, IMIĘ, PPPPPPPPPPP (PESEL). Program wczytuje każdy dokument, w którego nazwie jest PESEL lub imię i nazwisko (dowolna kolejność).', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                    <p class="description" style="margin-top: 8px;">
+                        <strong><?php esc_html_e( 'Słowa klucze:', 'obsluga-dokumentow-ksiegowych' ); ?></strong><br>
+                        <strong>RRRR</strong> <?php esc_html_e( 'rok 2000–2099', 'obsluga-dokumentow-ksiegowych' ); ?> &nbsp;|&nbsp;
+                        IMIĘ, NAZWISKO &nbsp;|&nbsp;
+                        <strong>PPPPPPPPPPP</strong> <?php esc_html_e( 'PESEL (11 cyfr)', 'obsluga-dokumentow-ksiegowych' ); ?> &nbsp;|&nbsp;
+                        <code>*</code> <?php esc_html_e( 'dowolny ciąg znaków', 'obsluga-dokumentow-ksiegowych' ); ?>
+                    </p>
+                    <div class="pit-form-row">
+                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz zmiany', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="pit-tab-dane-firmy" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-dane-firmy" hidden>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Firma', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                    <?php wp_nonce_field( 'pit_save_company_data', 'pit_company_data_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_save_company_data">
+                    <?php
+                    $pit_enabled_val    = (int) get_option( 'pit_enabled', 1 );
+                    $pit_company_name    = get_option( 'pit_company_name', '' );
+                    $pit_company_address = get_option( 'pit_company_address', '' );
+                    $pit_company_nip     = get_option( 'pit_company_nip', '' );
+                    ?>
+                    <div class="pit-form-row">
+                        <label for="pit_enabled"><?php esc_html_e( 'Włącz pobieranie', 'obsluga-dokumentow-ksiegowych' ); ?></label>
+                        <label class="pit-toggle">
+                            <input type="checkbox" name="pit_enabled" id="pit_enabled" value="1" <?php checked( 1, $pit_enabled_val ); ?>>
+                            <span class="pit-toggle-slider"></span>
+                        </label>
+                        <span class="pit-toggle-label"><?php echo $pit_enabled_val ? esc_html__( 'ON', 'obsluga-dokumentow-ksiegowych' ) : esc_html__( 'OFF', 'obsluga-dokumentow-ksiegowych' ); ?></span>
+                    </div>
+                    <div class="pit-form-row">
+                        <label for="pit_company_name"><?php esc_html_e( 'Nazwa firmy', 'obsluga-dokumentow-ksiegowych' ); ?></label>
+                        <input type="text" name="pit_company_name" id="pit_company_name" value="<?php echo esc_attr( $pit_company_name ); ?>" class="regular-text">
+                    </div>
+                    <div class="pit-form-row">
+                        <label for="pit_company_address"><?php esc_html_e( 'Adres firmy', 'obsluga-dokumentow-ksiegowych' ); ?></label>
+                        <input type="text" name="pit_company_address" id="pit_company_address" value="<?php echo esc_attr( $pit_company_address ); ?>" class="regular-text">
+                    </div>
+                    <div class="pit-form-row">
+                        <label for="pit_company_nip"><?php esc_html_e( 'NIP firmy', 'obsluga-dokumentow-ksiegowych' ); ?></label>
+                        <input type="text" name="pit_company_nip" id="pit_company_nip" value="<?php echo esc_attr( $pit_company_nip ); ?>" class="regular-text">
+                    </div>
+                    <div class="pit-form-row">
+                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz zmiany', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="pit-tab-pesel" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-pesel" hidden>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <p class="description">
+                    <?php esc_html_e( 'Plik .txt: w każdym wierszu jedna osoba w formacie: Imię Nazwisko PESEL (PESEL – 11 cyfr). Po wczytaniu program dopasuje PESEL do osób i dokumentów w bazie po imieniu i nazwisku.', 'obsluga-dokumentow-ksiegowych' ); ?>
+                </p>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" class="pit-form-row" style="margin-top: 10px;">
+                    <?php wp_nonce_field( 'pit_import_pesel_list_panel', 'pit_import_pesel_panel_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_import_pesel_list_panel">
+                    <input type="file" name="pit_pesel_list_file" accept=".txt" required>
+                    <button type="submit" class="button button-primary"><?php esc_html_e( 'Wczytaj i dopasuj', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                </form>
+
+                <h4 style="margin-top: 24px;"><?php esc_html_e( 'Wyszukiwanie PESEL w dokumencie PIT', 'obsluga-dokumentow-ksiegowych' ); ?></h4>
+                <p class="description"><?php esc_html_e( 'Reguły stosowane przy automatycznym odczycie numeru (np. PESEL) z dokumentów. Uzupełnij wiersze i dodawaj nowe, aby obsłużyć inne typy dokumentów.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-pesel-rules-form" style="margin-top: 10px;">
+                    <?php wp_nonce_field( 'pit_save_pesel_search_rule', 'pit_pesel_search_rule_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_save_pesel_search_rule">
+                    <?php
+                    $pesel_rules = $this->get_pesel_search_rules_option();
+                    ?>
+                    <table class="pit-table widefat striped" id="pit-pesel-rules-table" style="max-width: 800px;">
+                        <thead>
+                            <tr>
+                                <th><?php esc_html_e( 'Szukany numer', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Nazwa nagłówka', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Nazwa sekcji', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Nr pola', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th style="width: 60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ( $pesel_rules as $idx => $row ) : ?>
+                                <tr class="pit-pesel-rule-row">
+                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][szukany_numer]" value="<?php echo esc_attr( $row['szukany_numer'] ); ?>" class="regular-text" placeholder="PESEL"></td>
+                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][nazwa_naglowka]" value="<?php echo esc_attr( $row['nazwa_naglowka'] ); ?>" class="regular-text" placeholder="PIT-11"></td>
+                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][nazwa_sekcji]" value="<?php echo esc_attr( $row['nazwa_sekcji'] ); ?>" class="regular-text" placeholder="C"></td>
+                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][nr_pola]" value="<?php echo esc_attr( $row['nr_pola'] ); ?>" class="small-text" placeholder="12" maxlength="10"></td>
+                                    <td><button type="button" class="button pit-remove-pesel-rule" aria-label="<?php esc_attr_e( 'Usuń wiersz', 'obsluga-dokumentow-ksiegowych' ); ?>"><?php esc_html_e( 'Usuń', 'obsluga-dokumentow-ksiegowych' ); ?></button></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p style="margin-top: 8px;">
+                        <button type="button" class="button" id="pit-add-pesel-rule"><?php esc_html_e( 'Dodaj wiersz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                    </p>
+                    <div class="pit-form-row" style="margin-top: 12px;">
+                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz reguły', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                    </div>
+                </form>
+                <script>
+                (function() {
+                    var form = document.getElementById('pit-pesel-rules-form');
+                    var tbody = form && form.querySelector('#pit-pesel-rules-table tbody');
+                    var addBtn = document.getElementById('pit-add-pesel-rule');
+                    if (!tbody || !addBtn) return;
+                    addBtn.addEventListener('click', function() {
+                        var inputs = tbody.querySelectorAll('input[name^="pit_pesel_rules["]');
+                        var maxIdx = -1;
+                        inputs.forEach(function(inp) {
+                            var m = inp.name.match(/pit_pesel_rules\[(\d+)\]/);
+                            if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+                        });
+                        var idx = maxIdx + 1;
+                        var tr = document.createElement('tr');
+                        tr.className = 'pit-pesel-rule-row';
+                        tr.innerHTML = '<td><input type="text" name="pit_pesel_rules[' + idx + '][szukany_numer]" value="" class="regular-text" placeholder="PESEL"></td>' +
+                            '<td><input type="text" name="pit_pesel_rules[' + idx + '][nazwa_naglowka]" value="" class="regular-text" placeholder="PIT-11"></td>' +
+                            '<td><input type="text" name="pit_pesel_rules[' + idx + '][nazwa_sekcji]" value="" class="regular-text" placeholder="C"></td>' +
+                            '<td><input type="text" name="pit_pesel_rules[' + idx + '][nr_pola]" value="" class="small-text" placeholder="12" maxlength="10"></td>' +
+                            '<td><button type="button" class="button pit-remove-pesel-rule" aria-label="Usuń wiersz">Usuń</button></td>';
+                        tbody.appendChild(tr);
+                    });
+                    tbody.addEventListener('click', function(e) {
+                        if (e.target && e.target.classList && e.target.classList.contains('pit-remove-pesel-rule')) {
+                            var row = e.target.closest('tr');
+                            if (row && tbody.querySelectorAll('.pit-pesel-rule-row').length > 1) row.remove();
+                        }
+                    });
+                })();
+                </script>
             </div>
 
             <div id="pit-tab-raport" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-raport" hidden>
-                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Raport pobrania dokumentów', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Raport', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
                 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
                     <?php wp_nonce_field( 'pit_report_pdf_nonce', 'pit_report_pdf_nonce' ); ?>
                     <input type="hidden" name="action" value="pit_generate_report_pdf">
@@ -644,9 +1013,10 @@ class PIT_Accountant {
     }
 
     /**
-     * Obsługuje wgrywanie plików.
+     * Obsługuje wgrywanie plików (zwykłe lub chunked – wiele żądań po kilka plików).
      */
     public function handle_upload(): void {
+        pit_debug_log( 'handle_upload: start' );
         if ( ! $this->check_access() ) {
             wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
@@ -660,21 +1030,37 @@ class PIT_Accountant {
         }
 
         set_time_limit( 120 );
+        pit_debug_log( 'handle_upload: after set_time_limit' );
+
+        $is_chunked = $this->is_chunked_upload_request();
+        $chunk_key  = 'pit_upload_chunk_state_' . get_current_user_id();
+
+        if ( $is_chunked ) {
+            $state = get_transient( $chunk_key );
+            if ( ! is_array( $state ) ) {
+                $state = [ 'uploaded' => 0, 'errors' => 0, 'skipped' => 0, 'failed' => [] ];
+            }
+        } else {
+            $state = [ 'uploaded' => 0, 'errors' => 0, 'skipped' => 0, 'failed' => [] ];
+        }
 
         require_once ABSPATH . 'wp-admin/includes/file.php';
 
-        $uploaded   = 0;
-        $errors     = 0;
-        $skipped    = 0;
-        $failed     = [];
-        $db         = PIT_Database::get_instance();
-        $filters    = get_option( 'pit_filename_filters', [] );
-        $inserted_ids = [];
+        $db      = PIT_Database::get_instance();
+        $filters = get_option( 'pit_filename_filters', [] );
 
-        $files = $_FILES['pit_pdfs'];
-        $count = count( $files['name'] );
+        $files   = $_FILES['pit_pdfs'];
+        $count   = count( $files['name'] );
+        $uploaded = 0;
+        $errors   = 0;
+        $skipped  = 0;
+        $failed   = [];
+        pit_debug_log( 'handle_upload: files count=' . $count . ( $is_chunked ? ' (chunked)' : '' ) );
 
         for ( $i = 0; $i < $count; $i++ ) {
+            if ( $i > 0 && $i % 10 === 0 ) {
+                pit_debug_log( 'handle_upload: processed ' . $i . '/' . $count );
+            }
             if ( $files['error'][$i] !== UPLOAD_ERR_OK ) {
                 $errors++;
                 $failed[] = [
@@ -744,7 +1130,6 @@ class PIT_Accountant {
 
             if ( $result ) {
                 $uploaded++;
-                $inserted_ids[] = $result;
             } else {
                 $errors++;
                 $failed[] = [
@@ -757,23 +1142,68 @@ class PIT_Accountant {
             }
         }
 
-        if ( $uploaded > 0 ) {
-            $this->fill_missing_pesel_from_db_only( $db );
+        $state['uploaded'] += $uploaded;
+        $state['errors']   += $errors;
+        $state['skipped']  += $skipped;
+        $state['failed']    = array_merge( $state['failed'], $failed );
+
+        pit_debug_log( 'handle_upload: after loop, chunk uploaded=' . $uploaded . ', state uploaded=' . $state['uploaded'] );
+
+        $chunk_index     = $is_chunked ? (int) ( $_POST['pit_upload_chunk_index'] ?? 0 ) : 0;
+        $total_chunks    = $is_chunked ? (int) ( $_POST['pit_upload_total_chunks'] ?? 1 ) : 1;
+        $is_last_chunk   = ( $chunk_index >= $total_chunks - 1 );
+
+        if ( $is_chunked ) {
+            set_transient( $chunk_key, $state, 300 );
+            if ( $is_last_chunk ) {
+                if ( $state['uploaded'] > 0 ) {
+                    pit_debug_log( 'handle_upload: before fill_missing_pesel_after_upload (chunked last)' );
+                    $this->fill_missing_pesel_after_upload( $db );
+                }
+                delete_transient( $chunk_key );
+                $redirect = add_query_arg( [
+                    'pit_uploaded' => $state['uploaded'],
+                    'pit_errors'   => $state['errors'],
+                    'pit_skipped'  => $state['skipped'],
+                ], wp_get_referer() ?: home_url() );
+                if ( ! empty( $state['failed'] ) ) {
+                    set_transient( 'pit_upload_failed_files_' . get_current_user_id(), $state['failed'], 60 );
+                    $redirect = add_query_arg( 'pit_upload_failed', '1', $redirect );
+                }
+                wp_send_json_success( [ 'done' => true, 'redirect_url' => $redirect ] );
+            }
+            wp_send_json_success( [ 'done' => false ] );
         }
 
+        if ( $state['uploaded'] > 0 ) {
+            pit_debug_log( 'handle_upload: before fill_missing_pesel_after_upload' );
+            $this->fill_missing_pesel_after_upload( $db );
+        }
+
+        pit_debug_log( 'handle_upload: before redirect' );
         $redirect = add_query_arg( [
-            'pit_uploaded' => $uploaded,
-            'pit_errors'   => $errors,
-            'pit_skipped'  => $skipped,
+            'pit_uploaded' => $state['uploaded'],
+            'pit_errors'   => $state['errors'],
+            'pit_skipped'  => $state['skipped'],
         ], wp_get_referer() ?: home_url() );
 
-        if ( ! empty( $failed ) ) {
-            set_transient( 'pit_upload_failed_files_' . get_current_user_id(), $failed, 60 );
+        if ( ! empty( $state['failed'] ) ) {
+            set_transient( 'pit_upload_failed_files_' . get_current_user_id(), $state['failed'], 60 );
             $redirect = add_query_arg( 'pit_upload_failed', '1', $redirect );
         }
 
-        wp_redirect( esc_url_raw( $redirect ) );
-        exit;
+        pit_redirect_safe( $redirect );
+    }
+
+    /**
+     * Czy bieżące żądanie to upload po 1 pliku (AJAX) – zawsze zwracamy JSON zamiast redirectu.
+     */
+    private function is_chunked_upload_request(): bool {
+        $header = isset( $_SERVER['HTTP_X_REQUESTED_WITH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_REQUESTED_WITH'] ) ) : '';
+        return ( $header === 'XMLHttpRequest' )
+            && isset( $_POST['pit_upload_chunk_index'] )
+            && isset( $_POST['pit_upload_total_chunks'] )
+            && (int) $_POST['pit_upload_total_chunks'] >= 1;
     }
 
     /**
@@ -912,7 +1342,9 @@ class PIT_Accountant {
             return pit_person_match_key( (string) $row->full_name ) === $key;
         } );
 
-        $found_pesels = [];
+        $found_pesels     = [];
+        $pesel_near_label = [];
+        $pit11_section_c  = null;
         foreach ( $rows as $row ) {
             if ( ! file_exists( $row->file_path ) ) {
                 continue;
@@ -921,19 +1353,119 @@ class PIT_Accountant {
             if ( $text === '' ) {
                 continue;
             }
-            if ( preg_match_all( '/\b(\d{11})\b/', $text, $m ) ) {
-                foreach ( $m[1] as $p ) {
-                    $found_pesels[ $p ] = true;
+            $from_rules = $this->extract_pesel_by_document_rules( $text );
+            if ( $from_rules !== null ) {
+                $pit11_section_c = $from_rules;
+            }
+            $lines = preg_split( '/\r\n|\r|\n/', $text );
+            foreach ( $lines as $line ) {
+                if ( preg_match_all( '/\b(\d{11})\b/', $line, $m ) ) {
+                    $has_pesel_label = (bool) preg_match( '/PESEL/i', $line );
+                    foreach ( $m[1] as $p ) {
+                        $found_pesels[ $p ] = true;
+                        if ( $has_pesel_label ) {
+                            $pesel_near_label[ $p ] = true;
+                        }
+                    }
                 }
             }
         }
+        if ( $pit11_section_c !== null ) {
+            return $pit11_section_c;
+        }
 
         $unique = array_keys( $found_pesels );
+        $valid  = array_values( array_filter( $unique, function ( $p ) {
+            return function_exists( 'pit_validate_pesel_checksum' ) && pit_validate_pesel_checksum( $p );
+        } ) );
+        if ( count( $valid ) === 1 ) {
+            return $valid[0];
+        }
+        if ( count( $valid ) > 1 ) {
+            $valid_near_label = array_values( array_filter( $valid, function ( $p ) use ( $pesel_near_label ) {
+                return ! empty( $pesel_near_label[ $p ] );
+            } ) );
+            if ( count( $valid_near_label ) === 1 ) {
+                return $valid_near_label[0];
+            }
+            if ( ! empty( $valid_near_label ) ) {
+                return $valid_near_label[0];
+            }
+            return $valid[0];
+        }
         if ( count( $unique ) === 1 ) {
             return $unique[0];
         }
-        if ( count( $unique ) > 1 ) {
-            return null;
+        return null;
+    }
+
+    /**
+     * Wyciąga PESEL (11 cyfr) z tekstu PDF według reguł z zakładki PESEL (nagłówek, sekcja, nr pola).
+     *
+     * @param string $text Tekst wyciągnięty z PDF (pdftotext -layout).
+     * @return string|null PESEL (11 cyfr) lub null.
+     */
+    private function extract_pesel_by_document_rules( string $text ): ?string {
+        $rules = $this->get_pesel_search_rules_option();
+        foreach ( $rules as $rule ) {
+            $header = $rule['nazwa_naglowka'];
+            $section = $rule['nazwa_sekcji'];
+            $field_num = $rule['nr_pola'];
+            if ( $header === '' ) {
+                continue;
+            }
+            $head = substr( $text, 0, 1000 );
+            $header_esc = preg_quote( $header, '/' );
+            if ( ! preg_match( '/' . $header_esc . '/iu', $head ) ) {
+                continue;
+            }
+            $pos = 0;
+            if ( $section !== '' ) {
+                $section_esc = preg_quote( $section, '/' );
+                if ( preg_match( '/Sekcja\s*' . $section_esc . '\b/ui', $text, $m, PREG_OFFSET_CAPTURE ) ) {
+                    $pos = $m[0][1];
+                } elseif ( preg_match( '/' . $section_esc . '\b/ui', $text, $m, PREG_OFFSET_CAPTURE ) ) {
+                    $pos = $m[0][1];
+                } elseif ( preg_match( '/Dane\s+osoby\s+ubezpieczonej?\b/ui', $text, $m, PREG_OFFSET_CAPTURE ) && ( strpos( $section, 'ubezpieczon' ) !== false ) ) {
+                    $pos = $m[0][1];
+                } elseif ( preg_match( '/DANE\s+IDENTYFIKACYJNE\s+I\s+ADRES\s+ZAMIESZKANIA\s+PODATNIKA/ui', $text, $m, PREG_OFFSET_CAPTURE ) && ( strtoupper( $section ) === 'C' || $section === 'C' ) ) {
+                    $pos = $m[0][1];
+                } else {
+                    continue;
+                }
+            }
+            $chunk = substr( $text, $pos, 1200 );
+            if ( ! preg_match_all( '/\b(\d{11})\b/', $chunk, $nums ) ) {
+                continue;
+            }
+            $valid = array_values( array_filter( array_unique( $nums[1] ), function ( $p ) {
+                return function_exists( 'pit_validate_pesel_checksum' ) && pit_validate_pesel_checksum( $p );
+            } ) );
+            if ( count( $valid ) === 1 ) {
+                return $valid[0];
+            }
+            if ( count( $valid ) > 1 && $field_num !== '' ) {
+                $field_esc = preg_quote( $field_num, '/' );
+                $lines = preg_split( '/\r\n|\r|\n/', $chunk );
+                $lines_arr = array_values( $lines );
+                foreach ( $lines_arr as $li => $line ) {
+                    $has_field = (bool) preg_match( '/\b' . $field_esc . '\b|pole\s*' . $field_esc . '\b|numer\s*PESEL|Identyfikator\s+podatkowy|NIP\s*\/\s*numer\s*PESEL|Typ\s+identyfikatora/ui', $line );
+                    if ( ! $has_field ) {
+                        continue;
+                    }
+                    if ( preg_match( '/\b(\d{11})\b/', $line, $one ) && function_exists( 'pit_validate_pesel_checksum' ) && pit_validate_pesel_checksum( $one[1] ) ) {
+                        return $one[1];
+                    }
+                    $next_line = isset( $lines_arr[ $li + 1 ] ) ? $lines_arr[ $li + 1 ] : '';
+                    if ( $next_line !== '' && preg_match( '/\b(\d{11})\b/', $next_line, $one ) && function_exists( 'pit_validate_pesel_checksum' ) && pit_validate_pesel_checksum( $one[1] ) ) {
+                        return $one[1];
+                    }
+                }
+                return $valid[0];
+            }
+            if ( count( $valid ) > 0 ) {
+                return $valid[0];
+            }
         }
         return null;
     }
@@ -983,6 +1515,7 @@ class PIT_Accountant {
      * Obsługuje masowe usuwanie plików.
      */
     public function handle_bulk_delete(): void {
+        pit_debug_log( 'handle_bulk_delete: start' );
         if ( ! $this->check_access() ) {
             wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
@@ -991,12 +1524,22 @@ class PIT_Accountant {
             wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
-        $ids = $_POST['pit_delete_ids'] ?? [];
-        if ( ! is_array( $ids ) ) {
-            $ids = [];
+        $ids = [];
+        if ( ! empty( $_POST['pit_delete_ids_csv'] ) && is_string( $_POST['pit_delete_ids_csv'] ) ) {
+            $raw   = array_map( 'trim', explode( ',', $_POST['pit_delete_ids_csv'] ) );
+            $ids   = array_filter( array_map( 'intval', $raw ), function ( $id ) {
+                return $id > 0;
+            } );
         }
+        $fallback = $_POST['pit_delete_ids'] ?? [];
+        if ( empty( $ids ) && is_array( $fallback ) ) {
+            $ids = array_filter( array_map( 'intval', $fallback ), function ( $id ) {
+                return $id > 0;
+            } );
+        }
+        pit_debug_log( 'handle_bulk_delete: ids count=' . count( $ids ) . ', raw_csv=' . ( isset( $_POST['pit_delete_ids_csv'] ) ? substr( (string) $_POST['pit_delete_ids_csv'], 0, 100 ) : 'none' ) );
 
-        $db = PIT_Database::get_instance();
+        $db   = PIT_Database::get_instance();
         $count = 0;
 
         foreach ( $ids as $id ) {
@@ -1006,13 +1549,39 @@ class PIT_Accountant {
             }
         }
 
+        pit_debug_log( 'handle_bulk_delete: after loop, deleted=' . $count . ', before redirect' );
         $redirect = add_query_arg( 'pit_bulk_deleted', $count, wp_get_referer() ?: home_url() );
-        wp_redirect( esc_url_raw( $redirect ) );
-        exit;
+        pit_redirect_safe( $redirect );
     }
 
     /**
-     * Obsługuje ręczne ustawienie PESEL z panelu księgowego (link „Brak PESEL”).
+     * Usuwa z serwera wszystkie pliki, które mają co najmniej jedno pobranie.
+     */
+    public function handle_delete_downloaded_files(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_delete_downloaded_nonce'] ?? '', 'pit_delete_downloaded_files' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $db    = PIT_Database::get_instance();
+        $ids   = $db->get_downloaded_file_ids();
+        $count = 0;
+
+        foreach ( $ids as $id ) {
+            if ( $id > 0 && $db->delete_file( $id ) ) {
+                $count++;
+            }
+        }
+
+        $redirect = add_query_arg( 'pit_downloaded_deleted', $count, wp_get_referer() ?: home_url() );
+        pit_redirect_safe( $redirect );
+    }
+
+    /**
+     * Obsługuje ręczne ustawienie PESEL z panelu księgowego (link „Nie dopasowano”).
      */
     public function handle_set_pesel_front(): void {
         if ( ! $this->check_access() ) {
@@ -1038,6 +1607,164 @@ class PIT_Accountant {
 
         $redirect = add_query_arg( 'pit_set_pesel_ok', '1', wp_get_referer() ?: home_url() );
         wp_redirect( esc_url_raw( $redirect ) );
+        exit;
+    }
+
+    /**
+     * Zapisuje filtry nazw plików z zakładki Filtry plików.
+     */
+    public function handle_save_filename_filters(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_filename_filters_nonce'] ?? '', 'pit_save_filename_filters' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $input = isset( $_POST['pit_filename_filters'] ) && is_string( $_POST['pit_filename_filters'] )
+            ? $_POST['pit_filename_filters']
+            : '';
+        $lines = preg_split( '/\r\n|\r|\n/', $input );
+        $out   = [];
+        foreach ( $lines as $line ) {
+            $s = sanitize_text_field( is_string( $line ) ? $line : '' );
+            $s = trim( $s );
+            if ( $s !== '' ) {
+                $out[] = $s;
+            }
+        }
+        update_option( 'pit_filename_filters', array_values( $out ) );
+
+        $redirect = add_query_arg( 'pit_filters_saved', '1', wp_get_referer() ?: home_url() );
+        wp_redirect( esc_url_raw( $redirect ) );
+        exit;
+    }
+
+    /**
+     * Zapisuje dane firmy z zakładki Dane firmy.
+     */
+    public function handle_save_company_data(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_company_data_nonce'] ?? '', 'pit_save_company_data' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $enabled = empty( $_POST['pit_enabled'] ) ? 0 : 1;
+        $company_name    = sanitize_text_field( $_POST['pit_company_name'] ?? '' );
+        $company_address = sanitize_text_field( $_POST['pit_company_address'] ?? '' );
+        $nip_raw         = is_string( $_POST['pit_company_nip'] ?? '' ) ? $_POST['pit_company_nip'] : '';
+        $company_nip     = substr( preg_replace( '/[^0-9]/', '', $nip_raw ), 0, 10 );
+
+        update_option( 'pit_enabled', $enabled );
+        update_option( 'pit_company_name', $company_name );
+        update_option( 'pit_company_address', $company_address );
+        update_option( 'pit_company_nip', $company_nip );
+
+        $redirect = add_query_arg( 'pit_company_saved', '1', wp_get_referer() ?: home_url() );
+        wp_redirect( esc_url_raw( $redirect ) );
+        exit;
+    }
+
+    /**
+     * Obsługuje import listy PESEL z pliku .txt w panelu księgowego.
+     */
+    public function handle_import_pesel_list_panel(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_import_pesel_panel_nonce'] ?? '', 'pit_import_pesel_list_panel' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $redirect_base = wp_get_referer() ?: home_url();
+
+        if ( empty( $_FILES['pit_pesel_list_file']['tmp_name'] ) || ! is_uploaded_file( $_FILES['pit_pesel_list_file']['tmp_name'] ) ) {
+            wp_safe_redirect( esc_url_raw( add_query_arg( [ 'pit_import_skipped' => 0, 'pit_import_updated' => 0 ], $redirect_base ) ) );
+            exit;
+        }
+
+        $content = file_get_contents( $_FILES['pit_pesel_list_file']['tmp_name'] );
+        if ( $content === false ) {
+            wp_safe_redirect( esc_url_raw( add_query_arg( 'pit_import_error', '1', $redirect_base ) ) );
+            exit;
+        }
+
+        $lines   = preg_split( '/\r\n|\r|\n/', $content );
+        $updated = 0;
+        $skipped = 0;
+        $db      = PIT_Database::get_instance();
+
+        foreach ( $lines as $line ) {
+            $line = trim( $line );
+            if ( $line === '' ) {
+                continue;
+            }
+            if ( ! preg_match( '/\b(\d{11})\b/', $line, $m ) ) {
+                $skipped++;
+                continue;
+            }
+            $pesel     = $m[1];
+            $full_name = trim( preg_replace( '/\b\d{11}\b/', '', $line ) );
+            $full_name = pit_normalize_full_name( $full_name );
+            if ( $full_name === '' ) {
+                $skipped++;
+                continue;
+            }
+            $count = $db->update_pesel_for_person( $full_name, $pesel );
+            if ( $count > 0 ) {
+                $updated++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        wp_safe_redirect( esc_url_raw( add_query_arg( [ 'pit_import_updated' => $updated, 'pit_import_skipped' => $skipped ], $redirect_base ) ) );
+        exit;
+    }
+
+    /**
+     * Zapisuje reguły wyszukiwania PESEL w dokumencie PIT (zakładka PESEL).
+     */
+    public function handle_save_pesel_search_rule(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_pesel_search_rule_nonce'] ?? '', 'pit_save_pesel_search_rule' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $raw = isset( $_POST['pit_pesel_rules'] ) && is_array( $_POST['pit_pesel_rules'] ) ? $_POST['pit_pesel_rules'] : [];
+        $rules = [];
+        foreach ( $raw as $row ) {
+            if ( ! is_array( $row ) ) {
+                continue;
+            }
+            $naglowek = isset( $row['nazwa_naglowka'] ) ? sanitize_text_field( (string) $row['nazwa_naglowka'] ) : '';
+            $sekcja   = isset( $row['nazwa_sekcji'] ) ? sanitize_text_field( (string) $row['nazwa_sekcji'] ) : '';
+            $pole     = isset( $row['nr_pola'] ) ? sanitize_text_field( (string) $row['nr_pola'] ) : '';
+            if ( $naglowek === '' && $sekcja === '' && $pole === '' ) {
+                continue;
+            }
+            $rules[] = [
+                'szukany_numer'   => isset( $row['szukany_numer'] ) ? sanitize_text_field( (string) $row['szukany_numer'] ) : 'PESEL',
+                'nazwa_naglowka'  => $naglowek,
+                'nazwa_sekcji'    => $sekcja,
+                'nr_pola'         => $pole,
+            ];
+        }
+        if ( empty( $rules ) ) {
+            $rules = [ [ 'szukany_numer' => 'PESEL', 'nazwa_naglowka' => 'PIT-11', 'nazwa_sekcji' => 'C', 'nr_pola' => '12' ] ];
+        }
+        update_option( 'pit_pesel_search_rules', array_values( $rules ) );
+
+        $redirect = add_query_arg( 'pit_pesel_rule_saved', '1', wp_get_referer() ?: home_url() );
+        wp_safe_redirect( esc_url_raw( $redirect ) );
         exit;
     }
 
@@ -1104,6 +1831,8 @@ class PIT_Accountant {
         tr:nth-child(even) { background: #f9f9f9; }
         .not-downloaded { background: #fff8e1; }
         .downloaded { color: #2e7d32; }
+        .pit-full-name { font-weight: 700; text-transform: uppercase; }
+        .pit-doc-filename { font-size: 0.85em; color: #666; display: block; margin-top: 2px; }
         footer { margin-top: 40px; font-size: 12px; color: #666; text-align: center; }
     </style>
 </head>
@@ -1123,26 +1852,51 @@ class PIT_Accountant {
     <table>
         <thead>
             <tr>
-                <th>Lp.</th>
-                <th>Imię i nazwisko</th>
+                <th><?php esc_html_e( 'Nazwisko i imię', 'obsluga-dokumentow-ksiegowych' ); ?></th>
                 <th>PESEL</th>
-                <th>Data pobrania</th>
-                <th>Status</th>
+                <th><?php esc_html_e( 'Data pobrania', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                <th><?php esc_html_e( 'Status', 'obsluga-dokumentow-ksiegowych' ); ?></th>
             </tr>
         </thead>
         <tbody>
-            <?php 
-            $i = 1;
-            foreach ( $data as $row ) :
-                $is_downloaded = ! empty( $row->downloaded_at );
+            <?php
+            $report_groups = [];
+            foreach ( $data as $row ) {
+                $key = pit_person_match_key( (string) ( $row->full_name ?? '' ) );
+                if ( $key === '' ) {
+                    $key = 'file_' . (int) $row->id;
+                }
+                if ( ! isset( $report_groups[ $key ] ) ) {
+                    $report_groups[ $key ] = [];
+                }
+                $report_groups[ $key ][] = $row;
+            }
+            foreach ( $report_groups as $group ) :
+                $first = $group[0];
+                $pesel = $first->pesel ?? '';
+                $last_dl = '';
+                $all_downloaded = true;
+                foreach ( $group as $r ) {
+                    if ( empty( $r->downloaded_at ) ) {
+                        $all_downloaded = false;
+                    } elseif ( $last_dl === '' || strcmp( (string) $r->downloaded_at, $last_dl ) > 0 ) {
+                        $last_dl = $r->downloaded_at;
+                    }
+                }
+                $is_downloaded = $all_downloaded;
+                $full_name_upper = function_exists( 'mb_strtoupper' ) ? mb_strtoupper( (string) $first->full_name, 'UTF-8' ) : strtoupper( (string) $first->full_name );
             ?>
                 <tr class="<?php echo $is_downloaded ? '' : 'not-downloaded'; ?>">
-                    <td><?php echo $i++; ?></td>
-                    <td><?php echo esc_html( $row->full_name ); ?></td>
-                    <td><?php echo esc_html( $row->pesel ); ?></td>
                     <td>
-                        <?php echo $is_downloaded ? esc_html( $row->downloaded_at ) : '—'; ?>
+                        <strong class="pit-full-name"><?php echo esc_html( $full_name_upper ); ?></strong>
+                        <?php foreach ( $group as $r ) : ?>
+                            <?php if ( ! empty( $r->file_path ) ) : ?>
+                                <br><span class="pit-doc-filename"><?php echo esc_html( strtolower( basename( $r->file_path ) ) ); ?></span>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
                     </td>
+                    <td><?php echo esc_html( $pesel ); ?></td>
+                    <td><?php echo $is_downloaded ? esc_html( $last_dl ) : '—'; ?></td>
                     <td class="<?php echo $is_downloaded ? 'downloaded' : ''; ?>">
                         <?php echo $is_downloaded ? esc_html__( 'Pobrano', 'obsluga-dokumentow-ksiegowych' ) : esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </td>
@@ -1201,6 +1955,8 @@ class PIT_Accountant {
         tr:nth-child(even) { background: #f9f9f9; }
         .not-downloaded { background: #fff8e1; }
         .downloaded { color: #2e7d32; }
+        .pit-full-name { font-weight: 700; text-transform: uppercase; }
+        .pit-doc-filename { font-size: 0.85em; color: #666; display: block; margin-top: 2px; }
         footer { margin-top: 40px; font-size: 12px; color: #666; text-align: center; }
         .print-btn { margin-bottom: 20px; }
     </style>
@@ -1227,32 +1983,59 @@ class PIT_Accountant {
     <table>
         <thead>
             <tr>
-                <th>Lp.</th>
-                <th>Imię i nazwisko</th>
+                <th><?php esc_html_e( 'Nazwisko i imię', 'obsluga-dokumentow-ksiegowych' ); ?></th>
                 <th>PESEL</th>
                 <?php if ( $year === 0 ) : ?>
-                <th>Rok</th>
+                <th><?php esc_html_e( 'Rok', 'obsluga-dokumentow-ksiegowych' ); ?></th>
                 <?php endif; ?>
-                <th>Data pobrania</th>
-                <th>Status</th>
+                <th><?php esc_html_e( 'Data pobrania', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                <th><?php esc_html_e( 'Status', 'obsluga-dokumentow-ksiegowych' ); ?></th>
             </tr>
         </thead>
         <tbody>
-            <?php 
-            $i = 1;
-            foreach ( $data as $row ) :
-                $is_downloaded = ! empty( $row->downloaded_at );
+            <?php
+            $report_groups = [];
+            foreach ( $data as $row ) {
+                $key = pit_person_match_key( (string) ( $row->full_name ?? '' ) );
+                if ( $key === '' ) {
+                    $key = 'file_' . (int) $row->id;
+                }
+                if ( ! isset( $report_groups[ $key ] ) ) {
+                    $report_groups[ $key ] = [];
+                }
+                $report_groups[ $key ][] = $row;
+            }
+            foreach ( $report_groups as $group ) :
+                $first = $group[0];
+                $pesel = $first->pesel ?? '';
+                $years = array_unique( array_map( function ( $r ) { return (int) $r->tax_year; }, $group ) );
+                sort( $years );
+                $last_dl = '';
+                $all_downloaded = true;
+                foreach ( $group as $r ) {
+                    if ( empty( $r->downloaded_at ) ) {
+                        $all_downloaded = false;
+                    } elseif ( $last_dl === '' || strcmp( (string) $r->downloaded_at, $last_dl ) > 0 ) {
+                        $last_dl = $r->downloaded_at;
+                    }
+                }
+                $is_downloaded = $all_downloaded;
+                $full_name_upper = function_exists( 'mb_strtoupper' ) ? mb_strtoupper( (string) $first->full_name, 'UTF-8' ) : strtoupper( (string) $first->full_name );
             ?>
                 <tr class="<?php echo $is_downloaded ? '' : 'not-downloaded'; ?>">
-                    <td><?php echo $i++; ?></td>
-                    <td><?php echo esc_html( $row->full_name ); ?></td>
-                    <td><?php echo esc_html( $row->pesel ); ?></td>
-                    <?php if ( $year === 0 ) : ?>
-                    <td><?php echo esc_html( $row->tax_year ); ?></td>
-                    <?php endif; ?>
                     <td>
-                        <?php echo $is_downloaded ? esc_html( $row->downloaded_at ) : '—'; ?>
+                        <strong class="pit-full-name"><?php echo esc_html( $full_name_upper ); ?></strong>
+                        <?php foreach ( $group as $r ) : ?>
+                            <?php if ( ! empty( $r->file_path ) ) : ?>
+                                <br><span class="pit-doc-filename"><?php echo esc_html( strtolower( basename( $r->file_path ) ) ); ?></span>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
                     </td>
+                    <td><?php echo esc_html( $pesel ); ?></td>
+                    <?php if ( $year === 0 ) : ?>
+                    <td><?php echo esc_html( implode( ', ', $years ) ); ?></td>
+                    <?php endif; ?>
+                    <td><?php echo $is_downloaded ? esc_html( $last_dl ) : '—'; ?></td>
                     <td class="<?php echo $is_downloaded ? 'downloaded' : ''; ?>">
                         <?php echo $is_downloaded ? esc_html__( 'Pobrano', 'obsluga-dokumentow-ksiegowych' ) : esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </td>

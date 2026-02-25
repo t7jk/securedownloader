@@ -13,10 +13,14 @@ class PIT_Client {
     /**
      * Konstruktor – rejestruje hooki WordPress.
      */
+    /** Czas życia klucza do listy plików (sekundy). */
+    private const FILES_LIST_TRANSIENT_TTL = 600;
+
     private function __construct() {
         add_action( 'init',               [ $this, 'register_shortcode' ] );
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'template_redirect',  [ $this, 'handle_download' ] );
+        add_action( 'template_redirect',  [ $this, 'handle_single_file_download' ], 5 );
     }
 
     /**
@@ -63,7 +67,8 @@ class PIT_Client {
                 'nonce'        => wp_create_nonce( 'pit_manager_nonce' ),
                 'errorPesel'   => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
                 'errorName'    => __( 'Imię i nazwisko są wymagane.', 'obsluga-dokumentow-ksiegowych' ),
-                'errorConfirm' => __( 'Musisz potwierdzić otrzymanie dokumentu.', 'obsluga-dokumentow-ksiegowych' ),
+                'errorFirstName' => __( 'Imię jest wymagane.', 'obsluga-dokumentow-ksiegowych' ),
+                'errorLastName'  => __( 'Nazwisko jest wymagane.', 'obsluga-dokumentow-ksiegowych' ),
             ] );
         }
     }
@@ -87,16 +92,66 @@ class PIT_Client {
 
         $error   = '';
         $success = '';
+        $files_list = [];
 
         if ( isset( $_GET['pit_error'] ) ) {
             $error = __( 'Nie znaleziono dokumentu. Sprawdź poprawność identyfikacji.', 'obsluga-dokumentow-ksiegowych' );
         }
 
+        $show_files_key = isset( $_GET['pit_show_files'] ) && isset( $_GET['pit_key'] )
+            ? preg_replace( '/[^a-zA-Z0-9]/', '', wp_unslash( $_GET['pit_key'] ) )
+            : '';
+        if ( $show_files_key !== '' ) {
+            $stored = get_transient( 'pit_client_files_' . $show_files_key );
+            if ( is_array( $stored ) && ! empty( $stored ) ) {
+                $files_list = $stored;
+            }
+        }
+
         ob_start();
+
+        if ( ! empty( $files_list ) ) {
+            // Ekran „Dokumenty do pobrania” – bez formularza.
+            ?>
+        <div class="pit-client-page pit-client-files-screen">
+            <h2><?php esc_html_e( 'Dokumenty do pobrania', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
+
+            <div class="pit-files-list">
+                <ul class="pit-files-list-items">
+                    <?php foreach ( $files_list as $item ) : ?>
+                        <?php
+                        $file_id   = (int) ( $item['id'] ?? 0 );
+                        $file_name = ! empty( $item['name'] ) ? $item['name'] : __( 'Dokument', 'obsluga-dokumentow-ksiegowych' );
+                        $download_url = add_query_arg(
+                            [
+                                'pit_download' => $file_id,
+                                'pit_key'      => $show_files_key,
+                            ],
+                            get_permalink()
+                        );
+                        ?>
+                        <li class="pit-files-list-item">
+                            <span class="pit-files-list-name"><?php echo esc_html( $file_name ); ?></span>
+                            <a href="<?php echo esc_url( $download_url ); ?>" class="button pit-download-one-btn">
+                                <?php esc_html_e( 'Pobierz', 'obsluga-dokumentow-ksiegowych' ); ?>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+
+            <p class="pit-files-screen-note"><?php esc_html_e( 'Możesz zamknąć bezpiecznie stronę.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+            <p class="pit-files-screen-actions">
+                <a href="<?php echo esc_url( remove_query_arg( [ 'pit_show_files', 'pit_key' ], get_permalink() ) ); ?>" class="button pit-back-home-btn"><?php esc_html_e( 'Powrót do strony głównej', 'obsluga-dokumentow-ksiegowych' ); ?></a>
+            </p>
+        </div>
+        <?php
+            return ob_get_clean();
+        }
 
         ?>
         <div class="pit-client-page">
-            <h2><?php esc_html_e( 'Pobierz swój PIT-11', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
+            <h2><?php esc_html_e( 'Pobierz dokumenty księgowe', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
 
             <?php if ( $company_name || $company_address || $company_nip ) : ?>
                 <div class="pit-company-info">
@@ -148,24 +203,29 @@ class PIT_Client {
                 </div>
 
                 <div class="pit-form-row">
-                    <label for="pit_full_name"><?php esc_html_e( 'Imię i nazwisko', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
+                    <label for="pit_last_name"><?php esc_html_e( 'Nazwisko', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
                     <input type="text" 
-                           name="full_name" 
-                           id="pit_full_name" 
-                           placeholder="<?php esc_attr_e( 'Np. Jan Kowalski', 'obsluga-dokumentow-ksiegowych' ); ?>"
-                           required>
+                           name="last_name" 
+                           id="pit_last_name" 
+                           class="pit-uppercase"
+                           placeholder="<?php esc_attr_e( 'Np. KOWALSKI', 'obsluga-dokumentow-ksiegowych' ); ?>"
+                           required
+                           autocomplete="family-name">
                 </div>
-
-                <div class="pit-form-row pit-checkbox-row">
-                    <label class="pit-checkbox-label">
-                        <input type="checkbox" name="confirm" id="pit_confirm" required>
-                        <?php esc_html_e( 'Potwierdzam otrzymanie dokumentu PIT.', 'obsluga-dokumentow-ksiegowych' ); ?>
-                    </label>
+                <div class="pit-form-row">
+                    <label for="pit_first_name"><?php esc_html_e( 'Imię', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
+                    <input type="text" 
+                           name="first_name" 
+                           id="pit_first_name" 
+                           class="pit-uppercase"
+                           placeholder="<?php esc_attr_e( 'Np. JAN', 'obsluga-dokumentow-ksiegowych' ); ?>"
+                           required
+                           autocomplete="given-name">
                 </div>
 
                 <div class="pit-form-row">
                     <button type="submit" class="button button-primary pit-submit-btn">
-                        <?php esc_html_e( 'Pobierz PIT-11', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        <?php esc_html_e( 'Pobierz dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </button>
                 </div>
             </form>
@@ -180,8 +240,56 @@ class PIT_Client {
     }
 
     /**
-     * Obsługuje pobieranie pliku.
+     * Sanityzuje i wymusza wielkie litery w polu imienia/nazwiska.
+     *
+     * @param string $value Wartość z formularza.
+     * @return string Trim, sanityzacja, wielkie litery (UTF-8).
      */
+    private function sanitize_uppercase_name( string $value ): string {
+        $s = sanitize_text_field( $value );
+        $s = preg_replace( '/^\s+|\s+$/u', '', $s );
+        if ( $s === '' ) {
+            return '';
+        }
+        return function_exists( 'mb_strtoupper' ) ? mb_strtoupper( $s, 'UTF-8' ) : strtoupper( $s );
+    }
+
+    /**
+     * Sprawdza, czy imię i nazwisko z bazy zgadza się z wpisanym (wymagana pełna zgodność).
+     *
+     * @param string $db_name   full_name z rekordu pliku.
+     * @param string $user_name Wpisane imię i nazwisko (po normalizacji).
+     * @return bool True jeśli identyczne (słowa w dowolnej kolejności).
+     */
+    /**
+     * Przekierowuje na stronę podatnika z komunikatem błędu.
+     */
+    private function redirect_client_error(): void {
+        $url = wp_get_referer();
+        if ( $url === false || $url === '' ) {
+            $url = remove_query_arg( [ 'pit_download', 'pit_key', 'pit_show_files' ] );
+        }
+        if ( $url === '' ) {
+            $url = home_url( '/' );
+        }
+        wp_redirect( add_query_arg( 'pit_error', '1', $url ) );
+    }
+
+    private function names_match_for_download( string $db_name, string $user_name ): bool {
+        $db_lower   = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $db_name ), 'UTF-8' ) : strtolower( trim( $db_name ) );
+        $user_lower = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $user_name ), 'UTF-8' ) : strtolower( trim( $user_name ) );
+        $db_parts   = array_values( array_filter( preg_split( '/[\s_]+/', $db_lower ) ) );
+        $user_parts = array_values( array_filter( preg_split( '/[\s_]+/', $user_lower ) ) );
+
+        $db_parts   = array_map( 'pit_normalize_name_for_compare', $db_parts );
+        $user_parts = array_map( 'pit_normalize_name_for_compare', $user_parts );
+
+        sort( $db_parts );
+        sort( $user_parts );
+
+        return $db_parts === $user_parts;
+    }
+
     public function handle_download(): void {
         if ( ! isset( $_POST['pit_nonce'] ) ) {
             return;
@@ -191,10 +299,12 @@ class PIT_Client {
             return;
         }
 
-        $pesel     = sanitize_text_field( $_POST['pesel'] ?? '' );
-        $full_name = sanitize_text_field( $_POST['full_name'] ?? '' );
-        $tax_year  = (int) ( $_POST['tax_year'] ?? 0 );
-        $confirm   = isset( $_POST['confirm'] );
+        $pesel      = sanitize_text_field( $_POST['pesel'] ?? '' );
+        $first_name = $this->sanitize_uppercase_name( $_POST['first_name'] ?? '' );
+        $last_name  = $this->sanitize_uppercase_name( $_POST['last_name'] ?? '' );
+        $tax_year   = (int) ( $_POST['tax_year'] ?? 0 );
+
+        $full_name = pit_normalize_full_name( $last_name . ' ' . $first_name );
 
         $errors = [];
 
@@ -202,16 +312,15 @@ class PIT_Client {
             $errors[] = 'pesel';
         }
 
-        if ( empty( $full_name ) ) {
-            $errors[] = 'full_name';
+        if ( $first_name === '' ) {
+            $errors[] = 'first_name';
+        }
+        if ( $last_name === '' ) {
+            $errors[] = 'last_name';
         }
 
         if ( $tax_year < 2000 || $tax_year > date( 'Y' ) + 1 ) {
             $errors[] = 'tax_year';
-        }
-
-        if ( ! $confirm ) {
-            $errors[] = 'confirm';
         }
 
         if ( ! empty( $errors ) ) {
@@ -219,37 +328,83 @@ class PIT_Client {
             exit;
         }
 
-        $db   = PIT_Database::get_instance();
-        $file = $db->get_file_by_pesel( $pesel, $tax_year );
+        $db    = PIT_Database::get_instance();
+        $files = $db->get_files_by_pesel( $pesel, $tax_year );
 
-        if ( ! $file ) {
+        if ( empty( $files ) ) {
             wp_redirect( add_query_arg( 'pit_error', '1', wp_get_referer() ) );
             exit;
         }
 
-        $db_parts   = preg_split( '/[\s_]+/', strtolower( trim( $file->full_name ) ) );
-        $user_parts = preg_split( '/[\s_]+/', strtolower( trim( $full_name ) ) );
-
-        sort( $db_parts );
-        sort( $user_parts );
-
-        if ( $db_parts !== $user_parts ) {
+        $first = $files[0];
+        if ( ! $this->names_match_for_download( $first->full_name, $full_name ) ) {
             wp_redirect( add_query_arg( 'pit_error', '1', wp_get_referer() ) );
             exit;
         }
 
-        $filepath = $file->file_path;
+        $downloadable = [];
+        foreach ( $files as $f ) {
+            $p = $f->file_path ?? '';
+            if ( $p !== '' && file_exists( $p ) ) {
+                $downloadable[] = [
+                    'id'   => (int) $f->id,
+                    'path' => $p,
+                    'name' => basename( $p ),
+                ];
+            }
+        }
 
-        if ( ! file_exists( $filepath ) ) {
+        if ( empty( $downloadable ) ) {
             wp_redirect( add_query_arg( 'pit_error', '1', wp_get_referer() ) );
             exit;
         }
 
-        $db->mark_downloaded( $file->id );
+        // Tylko znaki alfanumeryczne – unikamy problemów z URL i sanitize_text_field.
+        $pit_key = wp_generate_password( 32, false, false );
+        set_transient( 'pit_client_files_' . $pit_key, $downloadable, self::FILES_LIST_TRANSIENT_TTL );
 
-        $is_zip   = str_ends_with( strtolower( $filepath ), '.zip' );
-        $ext      = $is_zip ? 'zip' : 'pdf';
-        $filename = 'PIT-11_' . $tax_year . '_' . sanitize_file_name( $file->full_name ) . '.' . $ext;
+        $redirect_url = remove_query_arg( [ 'pit_error', 'pit_show_files', 'pit_key' ], wp_get_referer() );
+        $redirect_url = add_query_arg( [ 'pit_show_files' => '1', 'pit_key' => $pit_key ], $redirect_url );
+        wp_redirect( $redirect_url );
+        exit;
+    }
+
+    /**
+     * Obsługuje pobranie pojedynczego pliku (GET pit_download + pit_key).
+     */
+    public function handle_single_file_download(): void {
+        $file_id = isset( $_GET['pit_download'] ) ? (int) $_GET['pit_download'] : 0;
+        $pit_key = isset( $_GET['pit_key'] ) ? preg_replace( '/[^a-zA-Z0-9]/', '', wp_unslash( $_GET['pit_key'] ) ) : '';
+
+        if ( $file_id <= 0 || $pit_key === '' ) {
+            return;
+        }
+
+        $list = get_transient( 'pit_client_files_' . $pit_key );
+        if ( ! is_array( $list ) ) {
+            $this->redirect_client_error();
+            exit;
+        }
+
+        $found = null;
+        foreach ( $list as $item ) {
+            if ( (int) ( $item['id'] ?? 0 ) === $file_id ) {
+                $found = $item;
+                break;
+            }
+        }
+
+        if ( $found === null || empty( $found['path'] ) || ! file_exists( $found['path'] ) ) {
+            $this->redirect_client_error();
+            exit;
+        }
+
+        $db = PIT_Database::get_instance();
+        $db->mark_downloaded( $file_id );
+
+        $filepath = $found['path'];
+        $filename = $found['name'] ?? basename( $filepath );
+        $is_zip   = str_ends_with( strtolower( $filename ), '.zip' );
         $mime     = $is_zip ? 'application/zip' : 'application/pdf';
 
         header( 'Content-Type: ' . $mime );
@@ -258,7 +413,6 @@ class PIT_Client {
         header( 'Cache-Control: private, no-cache, no-store, must-revalidate' );
         header( 'Pragma: no-cache' );
         header( 'Expires: 0' );
-
         readfile( $filepath );
         exit;
     }

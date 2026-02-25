@@ -19,15 +19,9 @@ class PIT_Admin {
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'admin_post_pit_delete_file', [ $this, 'handle_delete_file' ] );
         add_action( 'admin_post_pit_create_page', [ $this, 'handle_create_page' ] );
-        add_action( 'update_option_pit_enabled', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_accountant_users', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_accountant_page_url', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_client_page_url', [ $this, 'redirect_after_save' ] );
-        add_action( 'update_option_pit_company_name', [ $this, 'redirect_after_save' ] );
-        add_action( 'update_option_pit_company_address', [ $this, 'redirect_after_save' ] );
-        add_action( 'update_option_pit_company_nip', [ $this, 'redirect_after_save' ] );
-        add_action( 'update_option_pit_filename_filters', [ $this, 'redirect_after_save' ] );
-        add_action( 'admin_post_pit_import_pesel_list', [ $this, 'handle_import_pesel_list' ] );
         add_action( 'admin_post_pit_set_pesel', [ $this, 'handle_set_pesel' ] );
     }
 
@@ -92,42 +86,6 @@ class PIT_Admin {
         );
 
         add_settings_field(
-            'pit_enabled',
-            __( 'Włącz pobieranie', 'obsluga-dokumentow-ksiegowych' ),
-            [ $this, 'render_field_toggle' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [ 'name' => 'pit_enabled' ]
-        );
-
-        add_settings_field(
-            'pit_company_name',
-            __( 'Nazwa firmy', 'obsluga-dokumentow-ksiegowych' ),
-            [ $this, 'render_field_text' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [ 'name' => 'pit_company_name' ]
-        );
-
-        add_settings_field(
-            'pit_company_address',
-            __( 'Adres firmy', 'obsluga-dokumentow-ksiegowych' ),
-            [ $this, 'render_field_text' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [ 'name' => 'pit_company_address' ]
-        );
-
-        add_settings_field(
-            'pit_company_nip',
-            __( 'NIP firmy', 'obsluga-dokumentow-ksiegowych' ),
-            [ $this, 'render_field_text' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [ 'name' => 'pit_company_nip' ]
-        );
-
-        add_settings_field(
             'pit_accountant_page_url',
             __( 'URL strony księgowego', 'obsluga-dokumentow-ksiegowych' ),
             [ $this, 'render_field_url' ],
@@ -165,17 +123,6 @@ class PIT_Admin {
             ]
         );
 
-        add_settings_field(
-            'pit_filename_filters',
-            __( 'Format nazwy pliku', 'obsluga-dokumentow-ksiegowych' ),
-            [ $this, 'render_field_filename_filters' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [
-                'name'        => 'pit_filename_filters',
-                'description' => __( 'Lista rekordów (jeden w każdej linii). Znak * zastępuje dowolny ciąg znaków z wyłączeniem placeholderów: RRRR (rok), NAZWISKO, IMIĘ, PPPPPPPPPPP (PESEL). Program wczytuje każdy dokument, w którego nazwie jest PESEL lub imię i nazwisko (dowolna kolejność).', 'obsluga-dokumentow-ksiegowych' ),
-            ]
-        );
     }
 
     public function sanitize_filename_filters( $input ): array {
@@ -195,32 +142,6 @@ class PIT_Admin {
             }
         }
         return array_values( $out );
-    }
-
-    public function render_field_filename_filters( array $args ): void {
-        $name  = $args['name'];
-        $value = get_option( $name, [] );
-        if ( ! is_array( $value ) ) {
-            $value = [];
-        }
-        $text = implode( "\n", $value );
-        printf(
-            '<textarea name="%s" rows="6" class="large-text code" placeholder="NAZWISKO IMIĘ*PIT-11*RRRR">%s</textarea>',
-            esc_attr( $name ),
-            esc_textarea( $text )
-        );
-        if ( ! empty( $args['description'] ) ) {
-            printf( '<p class="description">%s</p>', esc_html( $args['description'] ) );
-        }
-        ?>
-        <p class="description" style="margin-top: 8px;">
-            <strong><?php esc_html_e( 'Słowa klucze:', 'obsluga-dokumentow-ksiegowych' ); ?></strong><br>
-            <strong>RRRR</strong> <?php esc_html_e( 'rok 2000–2099', 'obsluga-dokumentow-ksiegowych' ); ?> &nbsp;|&nbsp;
-            IMIĘ, NAZWISKO &nbsp;|&nbsp;
-            <strong>PPPPPPPPPPP</strong> <?php esc_html_e( 'PESEL (11 cyfr)', 'obsluga-dokumentow-ksiegowych' ); ?> &nbsp;|&nbsp;
-            <code>*</code> <?php esc_html_e( 'dowolny ciąg znaków', 'obsluga-dokumentow-ksiegowych' ); ?>
-        </p>
-        <?php
     }
 
     public function render_field_text( array $args ): void {
@@ -466,7 +387,7 @@ class PIT_Admin {
                 <thead>
                     <tr>
                         <th><?php esc_html_e( 'Lp.', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                        <th><?php esc_html_e( 'Imię i nazwisko', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                        <th><?php esc_html_e( 'Nazwisko i imię', 'obsluga-dokumentow-ksiegowych' ); ?></th>
                         <th><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></th>
                         <th><?php esc_html_e( 'Rok', 'obsluga-dokumentow-ksiegowych' ); ?></th>
                         <th><?php esc_html_e( 'Wgrano', 'obsluga-dokumentow-ksiegowych' ); ?></th>
@@ -485,7 +406,7 @@ class PIT_Admin {
                         ?>
                             <tr class="<?php echo $is_downloaded ? '' : 'pit-not-downloaded'; ?>">
                                 <td><?php echo $i++; ?></td>
-                                <td><?php echo esc_html( $file->full_name ); ?></td>
+                                <td><?php echo esc_html( (string) $file->full_name ); ?></td>
                                 <td>
                                     <?php
                                     $pesel_empty = ( $file->pesel === '' || $file->pesel === null );
@@ -495,7 +416,7 @@ class PIT_Admin {
                                             <input type="hidden" name="action" value="pit_set_pesel">
                                             <?php wp_nonce_field( 'pit_set_pesel', 'pit_set_pesel_nonce' ); ?>
                                             <input type="hidden" name="pit_set_pesel_full_name" value="<?php echo esc_attr( $file->full_name ); ?>">
-                                            <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Brak PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></a>
+                                            <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Nie dopasowano', 'obsluga-dokumentow-ksiegowych' ); ?></a>
                                             <span class="pit-set-pesel-form" style="display:none;">
                                                 <input type="text" name="pit_set_pesel_value" placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-dokumentow-ksiegowych' ); ?>" maxlength="11" pattern="\d{11}" size="11" style="width:100px;">
                                                 <button type="submit" class="button button-small"><?php esc_html_e( 'Zapisz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
@@ -565,6 +486,16 @@ class PIT_Admin {
         ?>
         <div class="wrap obsluga-dokumentow-ksiegowych-wrap">
             <h1><?php esc_html_e( 'Ustawienia', 'obsluga-dokumentow-ksiegowych' ); ?></h1>
+            <p class="description" style="margin-top: -8px;">
+                <?php
+                printf(
+                    /* translators: 1: version number, 2: build number */
+                    esc_html__( 'Wersja %1$s (Build %2$s)', 'obsluga-dokumentow-ksiegowych' ),
+                    esc_html( PIT_VERSION ),
+                    esc_html( (string) PIT_BUILD )
+                );
+                ?>
+            </p>
 
             <?php if ( empty( $accountant_url ) || empty( $client_url ) || $accountant_shortcode_missing || $client_shortcode_missing ) : ?>
                 <div class="notice notice-warning is-dismissible" style="margin-top: 10px;">
@@ -605,80 +536,12 @@ class PIT_Admin {
                 submit_button();
                 ?>
             </form>
-
-            <hr style="margin: 25px 0;">
-            <h2><?php esc_html_e( 'Import listy PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
-            <p class="description">
-                <?php esc_html_e( 'Plik .txt: w każdym wierszu jedna osoba w formacie: Imię Nazwisko PESEL (PESEL – 11 cyfr). Po wczytaniu program dopasuje PESEL do osób i dokumentów w bazie po imieniu i nazwisku.', 'obsluga-dokumentow-ksiegowych' ); ?>
-            </p>
-            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" style="margin-top: 10px;">
-                <input type="hidden" name="action" value="pit_import_pesel_list">
-                <?php wp_nonce_field( 'pit_import_pesel_list', 'pit_import_pesel_nonce' ); ?>
-                <input type="file" name="pit_pesel_list_file" accept=".txt" required>
-                <button type="submit" class="button button-secondary"><?php esc_html_e( 'Wczytaj i dopasuj', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-            </form>
         </div>
         <?php
     }
 
     /**
-     * Obsługuje import listy PESEL z pliku .txt (Imię Nazwisko PESEL w każdym wierszu).
-     */
-    public function handle_import_pesel_list(): void {
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
-        }
-
-        if ( ! wp_verify_nonce( $_POST['pit_import_pesel_nonce'] ?? '', 'pit_import_pesel_list' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
-        }
-
-        if ( empty( $_FILES['pit_pesel_list_file']['tmp_name'] ) || ! is_uploaded_file( $_FILES['pit_pesel_list_file']['tmp_name'] ) ) {
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&pit_import_skipped=0&pit_import_updated=0' ) );
-            exit;
-        }
-
-        $content = file_get_contents( $_FILES['pit_pesel_list_file']['tmp_name'] );
-        if ( $content === false ) {
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&pit_import_error=1' ) );
-            exit;
-        }
-
-        $lines   = preg_split( '/\r\n|\r|\n/', $content );
-        $updated = 0;
-        $skipped = 0;
-        $db      = PIT_Database::get_instance();
-
-        foreach ( $lines as $line ) {
-            $line = trim( $line );
-            if ( $line === '' ) {
-                continue;
-            }
-            if ( ! preg_match( '/\b(\d{11})\b/', $line, $m ) ) {
-                $skipped++;
-                continue;
-            }
-            $pesel     = $m[1];
-            $full_name = trim( preg_replace( '/\b\d{11}\b/', '', $line ) );
-            $full_name = pit_normalize_full_name( $full_name );
-            if ( $full_name === '' ) {
-                $skipped++;
-                continue;
-            }
-            $count = $db->update_pesel_for_person( $full_name, $pesel );
-            if ( $count > 0 ) {
-                $updated++;
-            } else {
-                $skipped++;
-            }
-        }
-
-        wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&pit_import_updated=' . $updated . '&pit_import_skipped=' . $skipped ) );
-        exit;
-    }
-
-    /**
-     * Obsługuje ręczne ustawienie PESEL dla osoby (link „Brak PESEL” na liście).
+     * Obsługuje ręczne ustawienie PESEL dla osoby (link „Nie dopasowano” na liście).
      */
     public function handle_set_pesel(): void {
         if ( ! current_user_can( 'manage_options' ) ) {

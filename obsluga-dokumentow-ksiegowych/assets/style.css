@@ -143,12 +143,56 @@ body .pit-accountant-panel h3 {
     box-shadow: 0 0 0 2px rgba(44, 82, 130, 0.2);
 }
 
+.pit-form-row input.pit-uppercase {
+    text-transform: uppercase;
+}
+
 .pit-form-row input[type="file"] {
     padding: 8px;
     border: 2px dashed var(--pit-border);
     border-radius: 4px;
     background: #fafafa;
     cursor: pointer;
+}
+
+/* Pasek postępu wgrywania (po 1 pliku) */
+.pit-upload-progress-wrap {
+    margin-top: 12px;
+}
+.pit-upload-progress {
+    height: 24px;
+    background: var(--pit-bg);
+    border: 1px solid var(--pit-border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+.pit-upload-progress-bar {
+    height: 100%;
+    background: var(--pit-accent);
+    transition: width 0.2s ease;
+}
+.pit-upload-progress-text {
+    display: block;
+    font-size: 13px;
+    color: var(--pit-text);
+}
+
+/* Imię i nazwisko w liście dokumentów – pogrubione, wielkie litery (wysoka specyficzność) */
+.pit-accountant-panel #pit-files-table td .pit-full-name,
+.pit-accountant-panel #pit-files-table td strong.pit-full-name {
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    font-size: 1em !important;
+}
+
+/* Pełna nazwa pliku pod imieniem i nazwiskiem – mniejsza czcionka (wysoka specyficzność) */
+.pit-accountant-panel #pit-files-table td .pit-doc-filename {
+    font-size: 0.65em !important;
+    font-weight: normal !important;
+    color: #666;
+    display: block;
+    margin-top: 2px;
 }
 
 .pit-form-row input[type="file"]:hover {
@@ -199,6 +243,88 @@ body .pit-accountant-panel h3 {
     background: #1a365d;
 }
 
+/* Lista plików do pobrania (po weryfikacji) */
+.pit-files-list {
+    margin: 24px 0;
+    padding: 16px;
+    background: var(--pit-bg, #f9f9f9);
+    border: 1px solid var(--pit-border);
+    border-radius: 6px;
+}
+
+.pit-files-list-intro {
+    margin: 0 0 12px 0;
+    font-weight: 600;
+}
+
+.pit-files-list-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.pit-files-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--pit-border);
+}
+
+.pit-files-list-item:last-child {
+    border-bottom: none;
+}
+
+.pit-files-list-name {
+    flex: 1;
+    word-break: break-all;
+}
+
+.pit-download-one-btn {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    font-size: 13px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+/* Ekran „Dokumenty do pobrania” (osobny widok) */
+.pit-client-files-screen {
+    max-width: 560px;
+}
+
+.pit-client-files-screen .pit-files-list {
+    margin-top: 16px;
+}
+
+.pit-files-screen-note {
+    margin: 24px 0 16px 0;
+    color: var(--pit-text-muted, #666);
+    font-size: 14px;
+}
+
+.pit-files-screen-actions {
+    margin: 0;
+}
+
+.pit-back-home-btn {
+    display: inline-block;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    background: var(--pit-accent);
+    color: #fff;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.pit-back-home-btn:hover {
+    background: #1a365d;
+    color: #fff;
+}
+
 .button-small {
     padding: 6px 12px;
     font-size: 12px;
@@ -210,6 +336,20 @@ body .pit-accountant-panel h3 {
 
 .button-link-delete:hover {
     color: #a00;
+}
+
+.pit-btn-delete-downloaded {
+    background: #b32d2e !important;
+    color: #fff !important;
+    border-color: #b32d2e !important;
+    padding: 10px 20px;
+    font-weight: 600;
+}
+
+.pit-btn-delete-downloaded:hover {
+    background: #8a2324 !important;
+    color: #fff !important;
+    border-color: #8a2324 !important;
 }
 
 /* Komunikaty */

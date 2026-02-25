@@ -288,6 +288,36 @@ class PIT_Database {
 	}
 
 	/**
+	 * Pobiera wszystkie pliki dla danego PESEL i roku (do pobrania wielu dokumentów lub ZIP).
+	 *
+	 * @param string $pesel    Numer PESEL.
+	 * @param int    $tax_year Rok podatkowy.
+	 * @return array Lista obiektów plików (posortowane wg id).
+	 */
+	public function get_files_by_pesel( string $pesel, int $tax_year ): array {
+		global $wpdb;
+
+		$pesel_digits = preg_replace( '/\D/', '', $pesel );
+		$pesel_11     = str_pad( $pesel_digits, 11, '0', STR_PAD_LEFT );
+		if ( strlen( $pesel_11 ) > 11 ) {
+			$pesel_11 = substr( $pesel_11, -11 );
+		}
+
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT f.* FROM %i f 
+				 WHERE LPAD(TRIM(COALESCE(f.pesel, '')), 11, '0') = %s AND f.tax_year = %d 
+				 ORDER BY f.id ASC",
+				self::$table_files,
+				$pesel_11,
+				$tax_year
+			)
+		);
+
+		return is_array( $results ) ? $results : [];
+	}
+
+	/**
 	 * Pobiera wszystkie pliki dla danego roku.
 	 *
 	 * @param int $tax_year Rok podatkowy.
@@ -296,7 +326,7 @@ class PIT_Database {
 	public function get_all_files( int $tax_year ): array {
 		global $wpdb;
 
-		return $wpdb->get_results(
+		$results = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT f.*, 
 						MAX(d.downloaded_at) as last_download,
@@ -311,6 +341,8 @@ class PIT_Database {
 				$tax_year
 			)
 		);
+
+		return is_array( $results ) ? $results : [];
 	}
 
 	/**
@@ -329,7 +361,7 @@ class PIT_Database {
 				 FROM %i f 
 				 LEFT JOIN %i d ON f.id = d.file_id 
 				 GROUP BY f.id 
-				 ORDER BY f.uploaded_at DESC, f.full_name ASC",
+				 ORDER BY f.full_name ASC",
 				self::$table_files,
 				self::$table_downloads
 			)
@@ -379,15 +411,40 @@ class PIT_Database {
 			return false;
 		}
 
+		$wpdb->query(
+			$wpdb->prepare(
+				'DELETE FROM `' . self::$table_downloads . '` WHERE file_id = %d',
+				$file_id
+			)
+		);
+
 		if ( file_exists( $file->file_path ) ) {
 			unlink( $file->file_path );
 		}
 
-		return (bool) $wpdb->delete(
-			self::$table_files,
-			[ 'id' => $file_id ],
-			[ '%d' ]
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				'DELETE FROM `' . self::$table_files . '` WHERE id = %d',
+				$file_id
+			)
 		);
+
+		return $deleted !== false && (int) $deleted > 0;
+	}
+
+	/**
+	 * Zwraca ID plików, które mają co najmniej jedno pobranie (wpis w pit_downloads).
+	 *
+	 * @return array<int> Tablica ID plików.
+	 */
+	public function get_downloaded_file_ids(): array {
+		global $wpdb;
+
+		$ids = $wpdb->get_col(
+			"SELECT DISTINCT file_id FROM " . self::$table_downloads
+		);
+
+		return array_map( 'intval', is_array( $ids ) ? $ids : [] );
 	}
 
 	/**
@@ -421,7 +478,7 @@ class PIT_Database {
 					 FROM %i f
 					 LEFT JOIN %i d ON f.id = d.file_id
 					 WHERE f.tax_year = %d
-					 ORDER BY f.tax_year DESC, f.full_name ASC",
+					 ORDER BY f.full_name ASC",
 					self::$table_files,
 					self::$table_downloads,
 					$tax_year
@@ -434,7 +491,7 @@ class PIT_Database {
 				"SELECT f.*, d.downloaded_at, d.ip_address
 				 FROM %i f
 				 LEFT JOIN %i d ON f.id = d.file_id
-				 ORDER BY f.tax_year DESC, f.full_name ASC",
+				 ORDER BY f.full_name ASC, f.tax_year DESC",
 				self::$table_files,
 				self::$table_downloads
 			)

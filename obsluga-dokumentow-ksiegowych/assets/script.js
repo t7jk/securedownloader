@@ -10,9 +10,11 @@
         initDeleteConfirmation();
         initAdminFilters();
         initTableSorting();
+        initBulkDeleteButton();
         initBulkActions();
         initBrakPeselLink();
         initAccountantTabs();
+        initChunkedUpload();
     });
 
     /**
@@ -25,6 +27,14 @@
             return;
         }
 
+        $form.find('#pit_first_name, #pit_last_name').on('input', function() {
+            var $el = $(this);
+            var v = $el.val();
+            if (v !== v.toUpperCase()) {
+                $el.val(v.toUpperCase());
+            }
+        });
+
         $form.on('submit', function(e) {
             var hasError = false;
             var errors = [];
@@ -32,7 +42,6 @@
             var pesel = $('#pit_pesel').val().trim();
             var firstName = $('#pit_first_name').val().trim();
             var lastName = $('#pit_last_name').val().trim();
-            var confirm = $('#pit_confirm').is(':checked');
 
             $('.pit-field-error').remove();
             $form.find('input, select').removeClass('pit-error-border');
@@ -43,17 +52,12 @@
             }
 
             if (!firstName) {
-                errors.push({ field: 'pit_first_name', message: pitManager.errorName });
+                errors.push({ field: 'pit_first_name', message: pitManager.errorFirstName || pitManager.errorName });
                 hasError = true;
             }
 
             if (!lastName) {
-                errors.push({ field: 'pit_last_name', message: pitManager.errorName });
-                hasError = true;
-            }
-
-            if (!confirm) {
-                errors.push({ field: 'pit_confirm', message: pitManager.errorConfirm });
+                errors.push({ field: 'pit_last_name', message: pitManager.errorLastName || pitManager.errorName });
                 hasError = true;
             }
 
@@ -115,6 +119,8 @@
             return;
         }
 
+        $table.find('th.sortable[data-sort="name"]').addClass('sort-asc');
+
         $(document).on('click', '#pit-files-table th.sortable', function(e) {
             e.preventDefault();
             
@@ -137,20 +143,20 @@
 
                 switch (sortType) {
                     case 'name':
-                        aVal = $(a).find('td:eq(2)').data('name') || '';
-                        bVal = $(b).find('td:eq(2)').data('name') || '';
+                        aVal = $(a).find('td:eq(1)').data('name') || '';
+                        bVal = $(b).find('td:eq(1)').data('name') || '';
                         break;
                     case 'pesel':
-                        aVal = $(a).find('td:eq(3)').data('pesel') || '';
-                        bVal = $(b).find('td:eq(3)').data('pesel') || '';
+                        aVal = $(a).find('td:eq(2)').data('pesel') || '';
+                        bVal = $(b).find('td:eq(2)').data('pesel') || '';
                         break;
                     case 'year':
-                        aVal = parseInt($(a).find('td:eq(4)').data('year')) || 0;
-                        bVal = parseInt($(b).find('td:eq(4)').data('year')) || 0;
+                        aVal = parseInt($(a).find('td:eq(3)').data('year')) || 0;
+                        bVal = parseInt($(b).find('td:eq(3)').data('year')) || 0;
                         break;
                     case 'date':
-                        aVal = $(a).find('td:eq(5)').data('date') || '';
-                        bVal = $(b).find('td:eq(5)').data('date') || '';
+                        aVal = $(a).find('td:eq(4)').data('date') || '';
+                        bVal = $(b).find('td:eq(4)').data('date') || '';
                         break;
                 }
 
@@ -173,6 +179,25 @@
             $tbody.find('tr').not(':contains("Brak dokumentów")').each(function(index) {
                 $(this).find('.pit-lp').text(index + 1);
             });
+        });
+    }
+
+    /**
+     * Przycisk „Usuń zaznaczone” – wiązanie osobno, żeby działało nawet gdy lista jest pusta.
+     */
+    function initBulkDeleteButton() {
+        $(document).on('click', '#pit-bulk-delete-btn', function(e) {
+            e.preventDefault();
+            var $form = $('#pit-bulk-delete-form');
+            if (!$form.length) return;
+            var ids = $form.find('.pit-checkbox:checked').map(function() {
+                return $(this).val();
+            }).get();
+            if (ids.length === 0) return;
+            var msg = (typeof pitManager !== 'undefined' && pitManager.confirmBulkDelete) ? pitManager.confirmBulkDelete : 'Czy na pewno usunąć zaznaczone dokumenty?';
+            if (!confirm(msg)) return;
+            $form.find('input[name="pit_delete_ids_csv"]').val(ids.join(','));
+            $form[0].submit();
         });
     }
 
@@ -214,6 +239,13 @@
     }
 
     /**
+     * Wgrywanie po 1 pliku – obsługiwane przez inline skrypt w HTML (zawsze działa, bez zależności od pitManager).
+     */
+    function initChunkedUpload() {
+        /* Logika wgrywania po 1 pliku jest w inline script przy formularzu #pit-upload-form. */
+    }
+
+    /**
      * Przełączanie zakładek w panelu księgowego (bez przeładowania strony).
      */
     function initAccountantTabs() {
@@ -237,7 +269,7 @@
     }
 
     /**
-     * Klik w "Brak PESEL" pokazuje pole i przycisk Zapisz (bez zagnieżdżonego formularza).
+     * Klik w "Nie dopasowano" pokazuje pole i przycisk Zapisz (bez zagnieżdżonego formularza).
      */
     function initBrakPeselLink() {
         $(document).on('click', '.pit-brak-pesel-link', function(e) {
