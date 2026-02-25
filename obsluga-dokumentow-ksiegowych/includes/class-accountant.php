@@ -32,10 +32,8 @@ class PIT_Accountant {
         add_action( 'admin_post_nopriv_pit_save_filename_filters', [ $this, 'handle_save_filename_filters' ] );
         add_action( 'admin_post_pit_save_company_data', [ $this, 'handle_save_company_data' ] );
         add_action( 'admin_post_nopriv_pit_save_company_data', [ $this, 'handle_save_company_data' ] );
-        add_action( 'admin_post_pit_import_pesel_list_panel', [ $this, 'handle_import_pesel_list_panel' ] );
-        add_action( 'admin_post_nopriv_pit_import_pesel_list_panel', [ $this, 'handle_import_pesel_list_panel' ] );
-        add_action( 'admin_post_pit_save_pesel_search_rule', [ $this, 'handle_save_pesel_search_rule' ] );
-        add_action( 'admin_post_nopriv_pit_save_pesel_search_rule', [ $this, 'handle_save_pesel_search_rule' ] );
+        add_action( 'admin_post_pit_save_import_patterns', [ $this, 'handle_save_import_patterns' ] );
+        add_action( 'admin_post_nopriv_pit_save_import_patterns', [ $this, 'handle_save_import_patterns' ] );
         add_action( 'admin_post_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
         add_action( 'admin_post_nopriv_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
     }
@@ -360,16 +358,18 @@ class PIT_Accountant {
     }
 
     /**
-     * Zwraca reguły wyszukiwania numeru (PESEL) w dokumentach – tabela: szukany_numer, nazwa_naglowka, nazwa_sekcji, nr_pola.
+     * Zwraca wzorce importu (Wzorzec, Strona, Sekcja, Pole, Nazwa pliku) – używane przy imporcie do wyszukiwania PESEL itd.
      *
-     * @return array<int, array{szukany_numer: string, nazwa_naglowka: string, nazwa_sekcji: string, nr_pola: string}>
+     * @return array<int, array{wzorzec: string, strona: string, pozycja: string, pole: string, nazwa_pliku: string}>
      */
-    private function get_pesel_search_rules_option(): array {
+    private function get_import_patterns_option(): array {
         $default = [
-            [ 'szukany_numer' => 'PESEL', 'nazwa_naglowka' => 'PIT-11', 'nazwa_sekcji' => 'C', 'nr_pola' => '12' ],
-            [ 'szukany_numer' => 'PESEL', 'nazwa_naglowka' => 'Informacja roczna dla osoby ubezpieczonej', 'nazwa_sekcji' => 'Dane osoby ubezpieczonej', 'nr_pola' => 'Identyfikator' ],
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSIKO IMIE*PIT-11*.pdf' ],
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
+            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
+            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'IMIĘ', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
         ];
-        $raw = get_option( 'pit_pesel_search_rules', null );
+        $raw = get_option( 'pit_import_patterns', null );
         if ( is_array( $raw ) && ! empty( $raw ) ) {
             $out = [];
             foreach ( $raw as $row ) {
@@ -377,20 +377,78 @@ class PIT_Accountant {
                     continue;
                 }
                 $out[] = [
-                    'szukany_numer'   => isset( $row['szukany_numer'] ) ? sanitize_text_field( (string) $row['szukany_numer'] ) : '',
-                    'nazwa_naglowka'  => isset( $row['nazwa_naglowka'] ) ? sanitize_text_field( (string) $row['nazwa_naglowka'] ) : '',
-                    'nazwa_sekcji'    => isset( $row['nazwa_sekcji'] ) ? sanitize_text_field( (string) $row['nazwa_sekcji'] ) : '',
-                    'nr_pola'         => isset( $row['nr_pola'] ) ? sanitize_text_field( (string) $row['nr_pola'] ) : '',
+                    'wzorzec'     => isset( $row['wzorzec'] ) ? sanitize_text_field( (string) $row['wzorzec'] ) : '',
+                    'strona'      => isset( $row['strona'] ) ? sanitize_text_field( (string) $row['strona'] ) : '',
+                    'pozycja'     => isset( $row['pozycja'] ) ? sanitize_text_field( (string) $row['pozycja'] ) : '',
+                    'pole'        => isset( $row['pole'] ) ? sanitize_text_field( (string) $row['pole'] ) : '',
+                    'nazwa_pliku' => isset( $row['nazwa_pliku'] ) ? sanitize_text_field( (string) $row['nazwa_pliku'] ) : '',
                 ];
             }
             $out = array_values( array_filter( $out, function ( $r ) {
-                return $r['nazwa_naglowka'] !== '' || $r['nazwa_sekcji'] !== '' || $r['nr_pola'] !== '';
+                return $r['wzorzec'] !== '' || $r['pozycja'] !== '' || $r['pole'] !== '';
             } ) );
             if ( ! empty( $out ) ) {
                 return $out;
             }
         }
         return $default;
+    }
+
+    /**
+     * Sprawdza, czy nazwa pliku pasuje do wzorca (wzorzec może zawierać * jako wildcard).
+     *
+     * @param string $filename Nazwa pliku (np. Kowalski Jan PIT-11 2024.pdf).
+     * @param string $pattern  Wzorzec (np. NAZWSIKO IMIE*PIT-11*.pdf).
+     * @return bool
+     */
+    private function filename_matches_pattern( string $filename, string $pattern ): bool {
+        if ( $pattern === '' ) {
+            return true;
+        }
+        $parts = explode( '*', $pattern );
+        $regex = '';
+        foreach ( $parts as $part ) {
+            $regex .= preg_quote( $part, '/' );
+            $regex .= '.*';
+        }
+        $regex = rtrim( $regex, '.*' );
+        return (bool) preg_match( '/^' . $regex . '$/iu', $filename );
+    }
+
+    /**
+     * Zwraca reguły wyszukiwania (PESEL itd.) w dokumentach – wyłącznie z wzorców (zakładka Wzorce).
+     *
+     * @param string $filename Opcjonalna nazwa pliku – jeśli podana, zwracane są tylko reguły pasujące do nazwy pliku.
+     * @return array<int, array{szukany_numer: string, nazwa_naglowka: string, nazwa_sekcji: string, nr_pola: string, nazwa_pliku: string}>
+     */
+    private function get_pesel_search_rules_option( string $filename = '' ): array {
+        $patterns = $this->get_import_patterns_option();
+        $from_patterns = [];
+        foreach ( $patterns as $p ) {
+            if ( ( $p['wzorzec'] === '' && $p['pozycja'] === '' && $p['pole'] === '' ) ) {
+                continue;
+            }
+            $from_patterns[] = [
+                'szukany_numer'  => $p['wzorzec'] !== '' ? $p['wzorzec'] : 'PESEL',
+                'nazwa_naglowka' => 'PIT-11',
+                'nazwa_sekcji'   => $p['pozycja'],
+                'nr_pola'        => $p['pole'],
+                'nazwa_pliku'    => $p['nazwa_pliku'] ?? '',
+            ];
+        }
+        if ( ! empty( $from_patterns ) ) {
+            if ( $filename !== '' ) {
+                $filtered = array_values( array_filter( $from_patterns, function ( $rule ) use ( $filename ) {
+                    $pat = $rule['nazwa_pliku'] ?? '';
+                    return $pat === '' || $this->filename_matches_pattern( $filename, $pat );
+                } ) );
+                if ( ! empty( $filtered ) ) {
+                    return $filtered;
+                }
+            }
+            return $from_patterns;
+        }
+        return [];
     }
 
     /**
@@ -525,23 +583,6 @@ class PIT_Accountant {
         if ( isset( $_GET['pit_company_saved'] ) && $_GET['pit_company_saved'] === '1' ) {
             $message = __( 'Dane firmy zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
         }
-        if ( isset( $_GET['pit_import_updated'] ) || isset( $_GET['pit_import_skipped'] ) ) {
-            $updated = (int) ( $_GET['pit_import_updated'] ?? 0 );
-            $skipped = (int) ( $_GET['pit_import_skipped'] ?? 0 );
-            $message = sprintf(
-                __( 'Import PESEL: zaktualizowano %d, pominięto %d.', 'obsluga-dokumentow-ksiegowych' ),
-                $updated,
-                $skipped
-            );
-        }
-        if ( isset( $_GET['pit_import_error'] ) && $_GET['pit_import_error'] === '1' ) {
-            $message       = __( 'Błąd odczytu pliku.', 'obsluga-dokumentow-ksiegowych' );
-            $message_class = 'pit-error';
-        }
-        if ( isset( $_GET['pit_pesel_rule_saved'] ) && $_GET['pit_pesel_rule_saved'] === '1' ) {
-            $message = __( 'Reguły wyszukiwania PESEL w dokumencie PIT zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
-        }
-
         $db = PIT_Database::get_instance();
         set_time_limit( 90 );
         $this->maybe_pack_zip_for_same_person_year( $db );
@@ -586,8 +627,8 @@ class PIT_Accountant {
                 <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-dane-firmy" aria-selected="false" aria-controls="pit-tab-dane-firmy" data-pit-tab="dane-firmy">
                     <?php esc_html_e( 'Firma', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
-                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-pesel" aria-selected="false" aria-controls="pit-tab-pesel" data-pit-tab="pesel">
-                    <?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?>
+                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-wzorce" aria-selected="false" aria-controls="pit-tab-wzorce" data-pit-tab="wzorce">
+                    <?php esc_html_e( 'Wzorce', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
             </nav>
 
@@ -883,82 +924,75 @@ class PIT_Accountant {
                 </form>
             </div>
 
-            <div id="pit-tab-pesel" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-pesel" hidden>
-                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
-                <p class="description">
-                    <?php esc_html_e( 'Plik .txt: w każdym wierszu jedna osoba w formacie: Imię Nazwisko PESEL (PESEL – 11 cyfr). Po wczytaniu program dopasuje PESEL do osób i dokumentów w bazie po imieniu i nazwisku.', 'obsluga-dokumentow-ksiegowych' ); ?>
-                </p>
-                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" class="pit-form-row" style="margin-top: 10px;">
-                    <?php wp_nonce_field( 'pit_import_pesel_list_panel', 'pit_import_pesel_panel_nonce' ); ?>
-                    <input type="hidden" name="action" value="pit_import_pesel_list_panel">
-                    <input type="file" name="pit_pesel_list_file" accept=".txt" required>
-                    <button type="submit" class="button button-primary"><?php esc_html_e( 'Wczytaj i dopasuj', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-                </form>
-
-                <h4 style="margin-top: 24px;"><?php esc_html_e( 'Wyszukiwanie PESEL w dokumencie PIT', 'obsluga-dokumentow-ksiegowych' ); ?></h4>
-                <p class="description"><?php esc_html_e( 'Reguły stosowane przy automatycznym odczycie numeru (np. PESEL) z dokumentów. Uzupełnij wiersze i dodawaj nowe, aby obsłużyć inne typy dokumentów.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
-                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-pesel-rules-form" style="margin-top: 10px;">
-                    <?php wp_nonce_field( 'pit_save_pesel_search_rule', 'pit_pesel_search_rule_nonce' ); ?>
-                    <input type="hidden" name="action" value="pit_save_pesel_search_rule">
-                    <?php
-                    $pesel_rules = $this->get_pesel_search_rules_option();
-                    ?>
-                    <table class="pit-table widefat striped" id="pit-pesel-rules-table" style="max-width: 800px;">
+            <div id="pit-tab-wzorce" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-wzorce" hidden>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <p class="description"><?php esc_html_e( 'Wzorce stosowane przy imporcie do wyszukiwania danych (np. PESEL) w dokumentach. Strona – numer strony, Sekcja – np. sekcja formularza, Pole – etykieta pola.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                <?php if ( isset( $_GET['pit_patterns_saved'] ) && $_GET['pit_patterns_saved'] === '1' ) : ?>
+                    <div class="notice notice-success is-dismissible" style="margin-top: 10px;"><p><?php esc_html_e( 'Wzorce zapisane.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <?php endif; ?>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-wzorce-form" style="margin-top: 10px;">
+                    <?php wp_nonce_field( 'pit_save_import_patterns', 'pit_import_patterns_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_save_import_patterns">
+                    <?php $wzorce = $this->get_import_patterns_option(); ?>
+                    <table class="pit-table widefat striped" id="pit-wzorce-table">
                         <thead>
                             <tr>
-                                <th><?php esc_html_e( 'Szukany numer', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th><?php esc_html_e( 'Nazwa nagłówka', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th><?php esc_html_e( 'Nazwa sekcji', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th><?php esc_html_e( 'Nr pola', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th style="width: 60px;"></th>
+                                <th><?php esc_html_e( 'Szukm.', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Strona', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Sekcja', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Pole', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Nazwa pliku', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th style="width: 90px; min-width: 90px;"></th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ( $pesel_rules as $idx => $row ) : ?>
-                                <tr class="pit-pesel-rule-row">
-                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][szukany_numer]" value="<?php echo esc_attr( $row['szukany_numer'] ); ?>" class="regular-text" placeholder="PESEL"></td>
-                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][nazwa_naglowka]" value="<?php echo esc_attr( $row['nazwa_naglowka'] ); ?>" class="regular-text" placeholder="PIT-11"></td>
-                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][nazwa_sekcji]" value="<?php echo esc_attr( $row['nazwa_sekcji'] ); ?>" class="regular-text" placeholder="C"></td>
-                                    <td><input type="text" name="pit_pesel_rules[<?php echo (int) $idx; ?>][nr_pola]" value="<?php echo esc_attr( $row['nr_pola'] ); ?>" class="small-text" placeholder="12" maxlength="10"></td>
-                                    <td><button type="button" class="button pit-remove-pesel-rule" aria-label="<?php esc_attr_e( 'Usuń wiersz', 'obsluga-dokumentow-ksiegowych' ); ?>"><?php esc_html_e( 'Usuń', 'obsluga-dokumentow-ksiegowych' ); ?></button></td>
+                            <?php foreach ( $wzorce as $idx => $row ) : ?>
+                                <tr class="pit-wzorce-row">
+                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][wzorzec]" value="<?php echo esc_attr( $row['wzorzec'] ); ?>" class="regular-text" placeholder="PESEL"></td>
+                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][strona]" value="<?php echo esc_attr( $row['strona'] ); ?>" class="small-text" placeholder="1" maxlength="10"></td>
+                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][pozycja]" value="<?php echo esc_attr( $row['pozycja'] ); ?>" class="regular-text" placeholder="C. DANE IDENTYFIKACYJNE"></td>
+                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][pole]" value="<?php echo esc_attr( $row['pole'] ); ?>" class="regular-text" placeholder="numer PESEL"></td>
+                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][nazwa_pliku]" value="<?php echo esc_attr( $row['nazwa_pliku'] ?? '' ); ?>" class="regular-text" placeholder="*.pdf"></td>
+                                    <td style="white-space: nowrap;"><button type="button" class="button pit-remove-wzorce-row" aria-label="<?php esc_attr_e( 'Usuń wiersz', 'obsluga-dokumentow-ksiegowych' ); ?>"><?php esc_html_e( 'Usuń', 'obsluga-dokumentow-ksiegowych' ); ?></button></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                     <p style="margin-top: 8px;">
-                        <button type="button" class="button" id="pit-add-pesel-rule"><?php esc_html_e( 'Dodaj wiersz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                        <button type="button" class="button" id="pit-add-wzorce-row"><?php esc_html_e( 'Dodaj wiersz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                     </p>
                     <div class="pit-form-row" style="margin-top: 12px;">
-                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz reguły', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                     </div>
                 </form>
                 <script>
                 (function() {
-                    var form = document.getElementById('pit-pesel-rules-form');
-                    var tbody = form && form.querySelector('#pit-pesel-rules-table tbody');
-                    var addBtn = document.getElementById('pit-add-pesel-rule');
+                    var form = document.getElementById('pit-wzorce-form');
+                    var tbody = form && form.querySelector('#pit-wzorce-table tbody');
+                    var addBtn = document.getElementById('pit-add-wzorce-row');
                     if (!tbody || !addBtn) return;
                     addBtn.addEventListener('click', function() {
-                        var inputs = tbody.querySelectorAll('input[name^="pit_pesel_rules["]');
+                        var inputs = tbody.querySelectorAll('input[name^="pit_import_patterns["]');
                         var maxIdx = -1;
                         inputs.forEach(function(inp) {
-                            var m = inp.name.match(/pit_pesel_rules\[(\d+)\]/);
+                            var m = inp.name.match(/pit_import_patterns\[(\d+)\]/);
                             if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
                         });
                         var idx = maxIdx + 1;
                         var tr = document.createElement('tr');
-                        tr.className = 'pit-pesel-rule-row';
-                        tr.innerHTML = '<td><input type="text" name="pit_pesel_rules[' + idx + '][szukany_numer]" value="" class="regular-text" placeholder="PESEL"></td>' +
-                            '<td><input type="text" name="pit_pesel_rules[' + idx + '][nazwa_naglowka]" value="" class="regular-text" placeholder="PIT-11"></td>' +
-                            '<td><input type="text" name="pit_pesel_rules[' + idx + '][nazwa_sekcji]" value="" class="regular-text" placeholder="C"></td>' +
-                            '<td><input type="text" name="pit_pesel_rules[' + idx + '][nr_pola]" value="" class="small-text" placeholder="12" maxlength="10"></td>' +
-                            '<td><button type="button" class="button pit-remove-pesel-rule" aria-label="Usuń wiersz">Usuń</button></td>';
+                        tr.className = 'pit-wzorce-row';
+                        tr.innerHTML = '<td><input type="text" name="pit_import_patterns[' + idx + '][wzorzec]" value="" class="regular-text" placeholder="PESEL"></td>' +
+                            '<td><input type="text" name="pit_import_patterns[' + idx + '][strona]" value="" class="small-text" placeholder="1" maxlength="10"></td>' +
+                            '<td><input type="text" name="pit_import_patterns[' + idx + '][pozycja]" value="" class="regular-text" placeholder="C. DANE IDENTYFIKACYJNE"></td>' +
+                            '<td><input type="text" name="pit_import_patterns[' + idx + '][pole]" value="" class="regular-text" placeholder="numer PESEL"></td>' +
+                            '<td><input type="text" name="pit_import_patterns[' + idx + '][nazwa_pliku]" value="" class="regular-text" placeholder="*.pdf"></td>' +
+                            '<td><button type="button" class="button pit-remove-wzorce-row" aria-label="Usuń wiersz">Usuń</button></td>';
                         tbody.appendChild(tr);
                     });
                     tbody.addEventListener('click', function(e) {
-                        if (e.target && e.target.classList && e.target.classList.contains('pit-remove-pesel-rule')) {
+                        if (e.target && e.target.classList && e.target.classList.contains('pit-remove-wzorce-row')) {
                             var row = e.target.closest('tr');
-                            if (row && tbody.querySelectorAll('.pit-pesel-rule-row').length > 1) row.remove();
+                            if (row && tbody.querySelectorAll('.pit-wzorce-row').length > 1) row.remove();
                         }
                     });
                 })();
@@ -1340,7 +1374,7 @@ class PIT_Accountant {
             if ( $text === '' ) {
                 continue;
             }
-            $from_rules = $this->extract_pesel_by_document_rules( $text );
+            $from_rules = $this->extract_pesel_by_document_rules( $text, $row->file_path );
             if ( $from_rules !== null ) {
                 $pit11_section_c = $from_rules;
             }
@@ -1387,13 +1421,15 @@ class PIT_Accountant {
     }
 
     /**
-     * Wyciąga PESEL (11 cyfr) z tekstu PDF według reguł z zakładki PESEL (nagłówek, sekcja, nr pola).
+     * Wyciąga PESEL (11 cyfr) z tekstu PDF według reguł z zakładki Wzorce (nagłówek, sekcja, pole, nazwa pliku).
      *
-     * @param string $text Tekst wyciągnięty z PDF (pdftotext -layout).
+     * @param string $text     Tekst wyciągnięty z PDF (pdftotext -layout).
+     * @param string $file_path Ścieżka do pliku – używana do dopasowania wzorca „Nazwa pliku”.
      * @return string|null PESEL (11 cyfr) lub null.
      */
-    private function extract_pesel_by_document_rules( string $text ): ?string {
-        $rules = $this->get_pesel_search_rules_option();
+    private function extract_pesel_by_document_rules( string $text, string $file_path = '' ): ?string {
+        $filename = $file_path !== '' ? basename( $file_path ) : '';
+        $rules = $this->get_pesel_search_rules_option( $filename );
         foreach ( $rules as $rule ) {
             $header = $rule['nazwa_naglowka'];
             $section = $rule['nazwa_sekcji'];
@@ -1655,100 +1691,44 @@ class PIT_Accountant {
     }
 
     /**
-     * Obsługuje import listy PESEL z pliku .txt w panelu księgowego.
+     * Zapisuje wzorce importu (zakładka Wzorce).
      */
-    public function handle_import_pesel_list_panel(): void {
+    public function handle_save_import_patterns(): void {
         if ( ! $this->check_access() ) {
             wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
-        if ( ! wp_verify_nonce( $_POST['pit_import_pesel_panel_nonce'] ?? '', 'pit_import_pesel_list_panel' ) ) {
+        if ( ! wp_verify_nonce( $_POST['pit_import_patterns_nonce'] ?? '', 'pit_save_import_patterns' ) ) {
             wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
-        $redirect_base = wp_get_referer() ?: home_url();
-
-        if ( empty( $_FILES['pit_pesel_list_file']['tmp_name'] ) || ! is_uploaded_file( $_FILES['pit_pesel_list_file']['tmp_name'] ) ) {
-            wp_safe_redirect( esc_url_raw( add_query_arg( [ 'pit_import_skipped' => 0, 'pit_import_updated' => 0 ], $redirect_base ) ) );
-            exit;
-        }
-
-        $content = file_get_contents( $_FILES['pit_pesel_list_file']['tmp_name'] );
-        if ( $content === false ) {
-            wp_safe_redirect( esc_url_raw( add_query_arg( 'pit_import_error', '1', $redirect_base ) ) );
-            exit;
-        }
-
-        $lines   = preg_split( '/\r\n|\r|\n/', $content );
-        $updated = 0;
-        $skipped = 0;
-        $db      = PIT_Database::get_instance();
-
-        foreach ( $lines as $line ) {
-            $line = trim( $line );
-            if ( $line === '' ) {
-                continue;
-            }
-            if ( ! preg_match( '/\b(\d{11})\b/', $line, $m ) ) {
-                $skipped++;
-                continue;
-            }
-            $pesel     = $m[1];
-            $full_name = trim( preg_replace( '/\b\d{11}\b/', '', $line ) );
-            $full_name = pit_normalize_full_name( $full_name );
-            if ( $full_name === '' ) {
-                $skipped++;
-                continue;
-            }
-            $count = $db->update_pesel_for_person( $full_name, $pesel );
-            if ( $count > 0 ) {
-                $updated++;
-            } else {
-                $skipped++;
-            }
-        }
-
-        wp_safe_redirect( esc_url_raw( add_query_arg( [ 'pit_import_updated' => $updated, 'pit_import_skipped' => $skipped ], $redirect_base ) ) );
-        exit;
-    }
-
-    /**
-     * Zapisuje reguły wyszukiwania PESEL w dokumencie PIT (zakładka PESEL).
-     */
-    public function handle_save_pesel_search_rule(): void {
-        if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
-        }
-
-        if ( ! wp_verify_nonce( $_POST['pit_pesel_search_rule_nonce'] ?? '', 'pit_save_pesel_search_rule' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
-        }
-
-        $raw = isset( $_POST['pit_pesel_rules'] ) && is_array( $_POST['pit_pesel_rules'] ) ? $_POST['pit_pesel_rules'] : [];
-        $rules = [];
+        $raw = isset( $_POST['pit_import_patterns'] ) && is_array( $_POST['pit_import_patterns'] ) ? $_POST['pit_import_patterns'] : [];
+        $patterns = [];
         foreach ( $raw as $row ) {
             if ( ! is_array( $row ) ) {
                 continue;
             }
-            $naglowek = isset( $row['nazwa_naglowka'] ) ? sanitize_text_field( (string) $row['nazwa_naglowka'] ) : '';
-            $sekcja   = isset( $row['nazwa_sekcji'] ) ? sanitize_text_field( (string) $row['nazwa_sekcji'] ) : '';
-            $pole     = isset( $row['nr_pola'] ) ? sanitize_text_field( (string) $row['nr_pola'] ) : '';
-            if ( $naglowek === '' && $sekcja === '' && $pole === '' ) {
+            $wzorzec     = isset( $row['wzorzec'] ) ? sanitize_text_field( (string) $row['wzorzec'] ) : '';
+            $strona      = isset( $row['strona'] ) ? sanitize_text_field( (string) $row['strona'] ) : '';
+            $pozycja     = isset( $row['pozycja'] ) ? sanitize_text_field( (string) $row['pozycja'] ) : '';
+            $pole        = isset( $row['pole'] ) ? sanitize_text_field( (string) $row['pole'] ) : '';
+            $nazwa_pliku = isset( $row['nazwa_pliku'] ) ? sanitize_text_field( (string) $row['nazwa_pliku'] ) : '';
+            if ( $wzorzec === '' && $pozycja === '' && $pole === '' ) {
                 continue;
             }
-            $rules[] = [
-                'szukany_numer'   => isset( $row['szukany_numer'] ) ? sanitize_text_field( (string) $row['szukany_numer'] ) : 'PESEL',
-                'nazwa_naglowka'  => $naglowek,
-                'nazwa_sekcji'    => $sekcja,
-                'nr_pola'         => $pole,
+            $patterns[] = [ 'wzorzec' => $wzorzec, 'strona' => $strona, 'pozycja' => $pozycja, 'pole' => $pole, 'nazwa_pliku' => $nazwa_pliku ];
+        }
+        if ( empty( $patterns ) ) {
+            $patterns = [
+                [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSIKO IMIE*PIT-11*.pdf' ],
+                [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
+                [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
+                [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'IMIĘ', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
             ];
         }
-        if ( empty( $rules ) ) {
-            $rules = [ [ 'szukany_numer' => 'PESEL', 'nazwa_naglowka' => 'PIT-11', 'nazwa_sekcji' => 'C', 'nr_pola' => '12' ] ];
-        }
-        update_option( 'pit_pesel_search_rules', array_values( $rules ) );
+        update_option( 'pit_import_patterns', array_values( $patterns ) );
 
-        $redirect = add_query_arg( 'pit_pesel_rule_saved', '1', wp_get_referer() ?: home_url() );
+        $redirect = add_query_arg( 'pit_patterns_saved', '1', wp_get_referer() ?: home_url() );
         wp_safe_redirect( esc_url_raw( $redirect ) );
         exit;
     }
