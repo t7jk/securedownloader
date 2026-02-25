@@ -3,7 +3,7 @@ Contributors: (twoje imię)
 Tags: pit, pit-11, księgowość, podatki, pdf, dokumenty
 Requires at least: 5.0
 Tested up to: 6.4
-Stable tag: 1.0.0
+Stable tag: 1.2.0
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -53,6 +53,9 @@ Obecnie obsługiwane są tylko pliki PDF.
 
 == Changelog ==
 
+= 1.2.0 =
+* Wersja 1.2.0
+
 = 1.0.0 =
 * Pierwsza wersja wtyczki
 * Podstawowa funkcjonalność wgrywania i pobierania PIT-11
@@ -60,6 +63,9 @@ Obecnie obsługiwane są tylko pliki PDF.
 * Shortcode [pit_download] dla formularza podatnika
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Aktualizacja do wersji 1.2.0.
 
 = 1.0.0 =
 Pierwsza wersja - brak wcześniejszych wersji do aktualizacji.

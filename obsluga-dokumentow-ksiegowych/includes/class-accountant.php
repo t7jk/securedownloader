@@ -428,14 +428,14 @@ class PIT_Accountant {
                 'obsluga-dokumentow-ksiegowych-style',
                 PIT_PLUGIN_URL . 'assets/style.css',
                 [],
-                PIT_VERSION
+                pit_plugin_version()
             );
 
             wp_enqueue_script(
                 'obsluga-dokumentow-ksiegowych-script',
                 PIT_PLUGIN_URL . 'assets/script.js',
                 [ 'jquery' ],
-                PIT_VERSION,
+                pit_plugin_version(),
                 true
             );
 
@@ -458,14 +458,6 @@ class PIT_Accountant {
      * @return string HTML panelu.
      */
     public function render_shortcode(): string {
-        if ( ! get_option( 'pit_enabled', 1 ) ) {
-            // Na produkcji pusty ekran często wynika z wyłączonej wtyczki – pokaż komunikat (zwł. dla admina)
-            if ( current_user_can( 'manage_options' ) ) {
-                return '<p class="pit-error">' . esc_html__( 'Wtyczka „Obsługa dokumentów księgowych” jest wyłączona. Włącz ją w Narzędzia → Obsługa dokumentów księgowych (przełącznik „Włącz pobieranie”).', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
-            }
-            return '';
-        }
-
         if ( ! $this->check_access() ) {
             if ( ! is_user_logged_in() ) {
                 $login_url = wp_login_url( get_permalink() );
@@ -869,19 +861,10 @@ class PIT_Accountant {
                     <?php wp_nonce_field( 'pit_save_company_data', 'pit_company_data_nonce' ); ?>
                     <input type="hidden" name="action" value="pit_save_company_data">
                     <?php
-                    $pit_enabled_val    = (int) get_option( 'pit_enabled', 1 );
                     $pit_company_name    = get_option( 'pit_company_name', '' );
                     $pit_company_address = get_option( 'pit_company_address', '' );
                     $pit_company_nip     = get_option( 'pit_company_nip', '' );
                     ?>
-                    <div class="pit-form-row">
-                        <label for="pit_enabled"><?php esc_html_e( 'Włącz pobieranie', 'obsluga-dokumentow-ksiegowych' ); ?></label>
-                        <label class="pit-toggle">
-                            <input type="checkbox" name="pit_enabled" id="pit_enabled" value="1" <?php checked( 1, $pit_enabled_val ); ?>>
-                            <span class="pit-toggle-slider"></span>
-                        </label>
-                        <span class="pit-toggle-label"><?php echo $pit_enabled_val ? esc_html__( 'ON', 'obsluga-dokumentow-ksiegowych' ) : esc_html__( 'OFF', 'obsluga-dokumentow-ksiegowych' ); ?></span>
-                    </div>
                     <div class="pit-form-row">
                         <label for="pit_company_name"><?php esc_html_e( 'Nazwa firmy', 'obsluga-dokumentow-ksiegowych' ); ?></label>
                         <input type="text" name="pit_company_name" id="pit_company_name" value="<?php echo esc_attr( $pit_company_name ); ?>" class="regular-text">
@@ -1657,13 +1640,11 @@ class PIT_Accountant {
             wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
-        $enabled = empty( $_POST['pit_enabled'] ) ? 0 : 1;
         $company_name    = sanitize_text_field( $_POST['pit_company_name'] ?? '' );
         $company_address = sanitize_text_field( $_POST['pit_company_address'] ?? '' );
         $nip_raw         = is_string( $_POST['pit_company_nip'] ?? '' ) ? $_POST['pit_company_nip'] : '';
         $company_nip     = substr( preg_replace( '/[^0-9]/', '', $nip_raw ), 0, 10 );
 
-        update_option( 'pit_enabled', $enabled );
         update_option( 'pit_company_name', $company_name );
         update_option( 'pit_company_address', $company_address );
         update_option( 'pit_company_nip', $company_nip );
