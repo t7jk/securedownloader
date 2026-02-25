@@ -497,6 +497,40 @@ class PIT_Admin {
                 ?>
             </p>
 
+            <?php
+            // Komunikaty po kliknięciu „Dodaj stronę” (księgowego / podatnika)
+            if ( isset( $_GET['page_created'] ) && $_GET['page_created'] === '1' ) :
+                ?>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Strona została utworzona i adres został zapisany.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+            <?php endif; ?>
+            <?php if ( isset( $_GET['page_exists'] ) && $_GET['page_exists'] === '1' ) : ?>
+                <div class="notice notice-warning is-dismissible"><p><?php esc_html_e( 'Strona o tym adresie (slug) już istnieje. Zmień slug lub usuń istniejącą stronę w Strony → Wszystkie strony.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+            <?php endif; ?>
+            <?php if ( isset( $_GET['page_linked'] ) && $_GET['page_linked'] === '1' ) : ?>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Strona o tym adresie już istniała; adres został zapisany w ustawieniach.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+            <?php endif; ?>
+            <?php if ( isset( $_GET['error'] ) ) : ?>
+                <div class="notice notice-error is-dismissible">
+                    <p>
+                        <?php
+                        switch ( $_GET['error'] ) {
+                            case 'no_url':
+                                esc_html_e( 'Błąd: brak zapisanego adresu URL. Wpisz adres w pole powyżej i kliknij „Zapisz zmiany”, a następnie „Dodaj”.', 'obsluga-dokumentow-ksiegowych' );
+                                break;
+                            case 'create_failed':
+                                esc_html_e( 'Błąd: nie udało się utworzyć strony (np. brak uprawnień do tworzenia stron). Sprawdź uprawnienia użytkownika i zapis katalogu WordPress.', 'obsluga-dokumentow-ksiegowych' );
+                                break;
+                            case 'invalid_option':
+                                esc_html_e( 'Błąd: nieprawidłowa opcja.', 'obsluga-dokumentow-ksiegowych' );
+                                break;
+                            default:
+                                echo esc_html( __( 'Wystąpił błąd.', 'obsluga-dokumentow-ksiegowych' ) );
+                        }
+                        ?>
+                    </p>
+                </div>
+            <?php endif; ?>
+
             <?php if ( empty( $accountant_url ) || empty( $client_url ) || $accountant_shortcode_missing || $client_shortcode_missing ) : ?>
                 <div class="notice notice-warning is-dismissible" style="margin-top: 10px;">
                     <p><strong><?php esc_html_e( 'Uwaga!', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
@@ -647,7 +681,10 @@ class PIT_Admin {
 
         $existing_page = get_page_by_path( $config['slug'] );
         if ( $existing_page ) {
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&page_exists=1' ) );
+            // Strona o tym slugu już istnieje – zapisz jej URL w opcji
+            $existing_url = get_permalink( $existing_page );
+            update_option( $option_name, $existing_url );
+            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&page_linked=1' ) );
             exit;
         }
 
