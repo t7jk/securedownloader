@@ -406,6 +406,52 @@ body .pit-accountant-panel h3 {
     background: #f5f5f5;
 }
 
+/* Tabela wzorców – mieści się w panelu, kolumna Usuń */
+#pit-wzorce-table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    box-sizing: border-box;
+}
+
+#pit-wzorce-table th:first-child,
+#pit-wzorce-table td:first-child {
+    width: 12%;
+}
+
+#pit-wzorce-table th:nth-child(2),
+#pit-wzorce-table td:nth-child(2) {
+    width: 6%;
+}
+
+#pit-wzorce-table th:nth-child(3),
+#pit-wzorce-table td:nth-child(3) {
+    width: 22%;
+}
+
+#pit-wzorce-table th:nth-child(4),
+#pit-wzorce-table td:nth-child(4) {
+    width: 18%;
+}
+
+#pit-wzorce-table th:nth-child(5),
+#pit-wzorce-table td:nth-child(5) {
+    width: 34%;
+}
+
+#pit-wzorce-table th:last-child,
+#pit-wzorce-table td:last-child {
+    width: 8%;
+    min-width: 70px;
+    box-sizing: border-box;
+}
+
+#pit-wzorce-table input.regular-text,
+#pit-wzorce-table input.small-text {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 /* Wiersz niepobranego dokumentu */
 .pit-not-downloaded {
     background: var(--pit-warning) !important;
