@@ -364,14 +364,12 @@ class PIT_Accountant {
      */
     private function get_default_import_patterns(): array {
         return [
-            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSIKO IMIE*PIT-11*.pdf' ],
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSKO IMIE*PIT-11*.pdf' ],
             [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
             [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
-            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'IMIĘ', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
+            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Imię', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
             [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '17 Pierwsze imie', 'nazwa_pliku' => '*PIT-11*.pdf' ],
             [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '16. Nazwisko', 'nazwa_pliku' => '*PIT-11*.pdf' ],
-            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '17 Pierwsze imie', 'nazwa_pliku' => 'PIT-11.pdf' ],
-            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '16. Nazwisko', 'nazwa_pliku' => 'PIT-11.pdf' ],
         ];
     }
 
@@ -928,14 +926,14 @@ class PIT_Accountant {
                     </table>
                     <div class="pit-wzorce-actions" style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
                         <button type="button" class="button" id="pit-add-wzorce-row"><?php esc_html_e( 'Dodaj wiersz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-                        <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-reset-patterns-form" style="display: inline; margin: 0;" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno przywrócić wszystkie domyślne wzorce? Obecna lista zostanie zastąpiona.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
-                            <?php wp_nonce_field( 'pit_reset_import_patterns', 'pit_reset_patterns_nonce' ); ?>
-                            <input type="hidden" name="action" value="pit_reset_import_patterns">
-                            <input type="hidden" name="pit_redirect_tab" value="wzorce">
-                            <button type="submit" class="button"><?php esc_html_e( 'Reset', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-                        </form>
                         <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                     </div>
+                </form>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-reset-patterns-form" style="display: inline; margin: 0; margin-top: 12px;" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno przywrócić wszystkie domyślne wzorce? Obecna lista zostanie zastąpiona.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
+                    <?php wp_nonce_field( 'pit_reset_import_patterns', 'pit_reset_patterns_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_reset_import_patterns">
+                    <input type="hidden" name="pit_redirect_tab" value="wzorce">
+                    <button type="submit" class="button"><?php esc_html_e( 'Reset', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                 </form>
                 <script>
                 (function() {
