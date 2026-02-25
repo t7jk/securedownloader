@@ -270,6 +270,10 @@
         var pitTab = params.get('pit_tab');
         if (pitTab) {
             switchToTab(pitTab);
+        } else if (window.history && window.history.replaceState) {
+            var url = new URL(window.location.href);
+            url.searchParams.set('pit_tab', 'lista');
+            window.history.replaceState({}, '', url.toString());
         }
 
         $(document).on('click', '.pit-tab', function(e) {
@@ -284,6 +288,12 @@
             var $target = $('#pit-tab-' + tabId);
             if ($target.length) {
                 $target.addClass('active').removeAttr('hidden');
+            }
+
+            var url = new URL(window.location.href);
+            url.searchParams.set('pit_tab', tabId);
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, '', url.toString());
             }
         });
     }
