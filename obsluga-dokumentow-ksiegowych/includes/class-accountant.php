@@ -28,12 +28,12 @@ class PIT_Accountant {
         add_action( 'admin_post_nopriv_pit_bulk_delete_files', [ $this, 'handle_bulk_delete' ] );
         add_action( 'admin_post_pit_set_pesel_front', [ $this, 'handle_set_pesel_front' ] );
         add_action( 'admin_post_nopriv_pit_set_pesel_front', [ $this, 'handle_set_pesel_front' ] );
-        add_action( 'admin_post_pit_save_filename_filters', [ $this, 'handle_save_filename_filters' ] );
-        add_action( 'admin_post_nopriv_pit_save_filename_filters', [ $this, 'handle_save_filename_filters' ] );
         add_action( 'admin_post_pit_save_company_data', [ $this, 'handle_save_company_data' ] );
         add_action( 'admin_post_nopriv_pit_save_company_data', [ $this, 'handle_save_company_data' ] );
         add_action( 'admin_post_pit_save_import_patterns', [ $this, 'handle_save_import_patterns' ] );
         add_action( 'admin_post_nopriv_pit_save_import_patterns', [ $this, 'handle_save_import_patterns' ] );
+        add_action( 'admin_post_pit_reset_import_patterns', [ $this, 'handle_reset_import_patterns' ] );
+        add_action( 'admin_post_nopriv_pit_reset_import_patterns', [ $this, 'handle_reset_import_patterns' ] );
         add_action( 'admin_post_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
         add_action( 'admin_post_nopriv_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
     }
@@ -358,17 +358,29 @@ class PIT_Accountant {
     }
 
     /**
+     * Zwraca listę domyślnych wzorców importu (używana przy instalacji i przy Resecie).
+     *
+     * @return array<int, array{wzorzec: string, strona: string, pozycja: string, pole: string, nazwa_pliku: string}>
+     */
+    private function get_default_import_patterns(): array {
+        return [
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSIKO IMIE*PIT-11*.pdf' ],
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
+            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
+            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'IMIĘ', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
+            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '17 Pierwsze imie', 'nazwa_pliku' => '*PIT-11*.pdf' ],
+            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '16. Nazwisko', 'nazwa_pliku' => '*PIT-11*.pdf' ],
+            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '17 Pierwsze imie', 'nazwa_pliku' => 'PIT-11.pdf' ],
+            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '16. Nazwisko', 'nazwa_pliku' => 'PIT-11.pdf' ],
+        ];
+    }
+
+    /**
      * Zwraca wzorce importu (Wzorzec, Strona, Sekcja, Pole, Nazwa pliku) – używane przy imporcie do wyszukiwania PESEL itd.
      *
      * @return array<int, array{wzorzec: string, strona: string, pozycja: string, pole: string, nazwa_pliku: string}>
      */
     private function get_import_patterns_option(): array {
-        $default = [
-            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSIKO IMIE*PIT-11*.pdf' ],
-            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
-            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
-            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'IMIĘ', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
-        ];
         $raw = get_option( 'pit_import_patterns', null );
         if ( is_array( $raw ) && ! empty( $raw ) ) {
             $out = [];
@@ -391,7 +403,7 @@ class PIT_Accountant {
                 return $out;
             }
         }
-        return $default;
+        return $this->get_default_import_patterns();
     }
 
     /**
@@ -577,9 +589,6 @@ class PIT_Accountant {
             $message       = __( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'obsluga-dokumentow-ksiegowych' );
             $message_class = 'pit-error';
         }
-        if ( isset( $_GET['pit_filters_saved'] ) && $_GET['pit_filters_saved'] === '1' ) {
-            $message = __( 'Filtry nazw plików zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
-        }
         if ( isset( $_GET['pit_company_saved'] ) && $_GET['pit_company_saved'] === '1' ) {
             $message = __( 'Dane firmy zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
         }
@@ -618,17 +627,11 @@ class PIT_Accountant {
                 <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-upload" aria-selected="false" aria-controls="pit-tab-upload" data-pit-tab="upload">
                     <?php esc_html_e( 'Wgrywanie', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
-                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-raport" aria-selected="false" aria-controls="pit-tab-raport" data-pit-tab="raport">
-                    <?php esc_html_e( 'Raport', 'obsluga-dokumentow-ksiegowych' ); ?>
-                </button>
-                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-filtry" aria-selected="false" aria-controls="pit-tab-filtry" data-pit-tab="filtry">
-                    <?php esc_html_e( 'Filtry', 'obsluga-dokumentow-ksiegowych' ); ?>
+                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-wzorce" aria-selected="false" aria-controls="pit-tab-wzorce" data-pit-tab="wzorce">
+                    <?php esc_html_e( 'Wzorce', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
                 <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-dane-firmy" aria-selected="false" aria-controls="pit-tab-dane-firmy" data-pit-tab="dane-firmy">
                     <?php esc_html_e( 'Firma', 'obsluga-dokumentow-ksiegowych' ); ?>
-                </button>
-                <button type="button" class="pit-tab" role="tab" id="pit-tab-btn-wzorce" aria-selected="false" aria-controls="pit-tab-wzorce" data-pit-tab="wzorce">
-                    <?php esc_html_e( 'Wzorce', 'obsluga-dokumentow-ksiegowych' ); ?>
                 </button>
             </nav>
 
@@ -735,13 +738,32 @@ class PIT_Accountant {
                 </div>
             </form>
 
-                <div class="pit-form-row pit-delete-downloaded-row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--pit-border, #ddd);">
+                <div class="pit-form-row pit-delete-downloaded-row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--pit-border, #ddd); display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-delete-downloaded-form" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno usunąć z serwera wszystkie pliki, które zostały już pobrane? Tej operacji nie można cofnąć.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
                         <?php wp_nonce_field( 'pit_delete_downloaded_files', 'pit_delete_downloaded_nonce' ); ?>
                         <input type="hidden" name="action" value="pit_delete_downloaded_files">
                         <button type="submit" class="button pit-btn-delete-downloaded">
                             <?php esc_html_e( 'Usuń pobrane', 'obsluga-dokumentow-ksiegowych' ); ?>
                         </button>
+                    </form>
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-report-pdf-form" class="pit-report-pdf-form-inline">
+                        <?php wp_nonce_field( 'pit_report_pdf_nonce', 'pit_report_pdf_nonce' ); ?>
+                        <input type="hidden" name="action" value="pit_generate_report_pdf">
+                        <div class="pit-report-year-block">
+                            <div class="pit-report-year-row">
+                                <span class="pit-report-year-label"><?php esc_html_e( 'Raport PDF – rok:', 'obsluga-dokumentow-ksiegowych' ); ?></span>
+                                <select name="year" id="pit-report-year">
+                                    <option value="0"><?php esc_html_e( 'Wszystkie lata', 'obsluga-dokumentow-ksiegowych' ); ?></option>
+                                    <?php
+                                    $years = $db->get_available_years();
+                                    foreach ( $years as $y ) :
+                                    ?>
+                                        <option value="<?php echo esc_attr( $y ); ?>"><?php echo esc_html( $y ); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" class="button pit-btn-generate-report"><?php esc_html_e( 'Generuj raport PDF', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                            </div>
+                        </div>
                     </form>
                 </div>
             <script>
@@ -866,34 +888,91 @@ class PIT_Accountant {
             </script>
             </div>
 
-            <div id="pit-tab-filtry" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-filtry" hidden>
-                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Filtry', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
-                <p class="description"><?php esc_html_e( 'Format nazwy pliku', 'obsluga-dokumentow-ksiegowych' ); ?></p>
-                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                    <?php wp_nonce_field( 'pit_save_filename_filters', 'pit_filename_filters_nonce' ); ?>
-                    <input type="hidden" name="action" value="pit_save_filename_filters">
-                    <?php
-                    $filters_value = get_option( 'pit_filename_filters', [] );
-                    if ( ! is_array( $filters_value ) ) {
-                        $filters_value = [];
-                    }
-                    $filters_text = implode( "\n", $filters_value );
-                    ?>
-                    <div class="pit-form-row">
-                        <textarea name="pit_filename_filters" id="pit_filename_filters" rows="6" class="large-text code" placeholder="NAZWISKO IMIĘ*PIT-11*RRRR"><?php echo esc_textarea( $filters_text ); ?></textarea>
-                    </div>
-                    <p class="description"><?php esc_html_e( 'Lista rekordów (jeden w każdej linii). Znak * zastępuje dowolny ciąg znaków z wyłączeniem placeholderów: RRRR (rok), NAZWISKO, IMIĘ, PPPPPPPPPPP (PESEL). Program wczytuje każdy dokument, w którego nazwie jest PESEL lub imię i nazwisko (dowolna kolejność).', 'obsluga-dokumentow-ksiegowych' ); ?></p>
-                    <p class="description" style="margin-top: 8px;">
-                        <strong><?php esc_html_e( 'Słowa klucze:', 'obsluga-dokumentow-ksiegowych' ); ?></strong><br>
-                        <strong>RRRR</strong> <?php esc_html_e( 'rok 2000–2099', 'obsluga-dokumentow-ksiegowych' ); ?> &nbsp;|&nbsp;
-                        IMIĘ, NAZWISKO &nbsp;|&nbsp;
-                        <strong>PPPPPPPPPPP</strong> <?php esc_html_e( 'PESEL (11 cyfr)', 'obsluga-dokumentow-ksiegowych' ); ?> &nbsp;|&nbsp;
-                        <code>*</code> <?php esc_html_e( 'dowolny ciąg znaków', 'obsluga-dokumentow-ksiegowych' ); ?>
-                    </p>
-                    <div class="pit-form-row">
-                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz zmiany', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+            <div id="pit-tab-wzorce" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-wzorce" hidden>
+                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
+                <p class="description"><?php esc_html_e( 'Wzorce stosowane przy imporcie do wyszukiwania danych (np. PESEL) w dokumentach. Strona – numer strony, Sekcja – np. sekcja formularza, Pole – etykieta pola.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                <?php if ( isset( $_GET['pit_patterns_saved'] ) && $_GET['pit_patterns_saved'] === '1' ) : ?>
+                    <div class="notice notice-success is-dismissible" style="margin-top: 10px;"><p><?php esc_html_e( 'Wzorce zapisane.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <?php endif; ?>
+                <?php if ( isset( $_GET['pit_patterns_reset'] ) && $_GET['pit_patterns_reset'] === '1' ) : ?>
+                    <div class="notice notice-success is-dismissible" style="margin-top: 10px;"><p><?php esc_html_e( 'Wzorce przywrócone do domyślnych.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <?php endif; ?>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-wzorce-form" style="margin-top: 10px;">
+                    <?php wp_nonce_field( 'pit_save_import_patterns', 'pit_import_patterns_nonce' ); ?>
+                    <input type="hidden" name="action" value="pit_save_import_patterns">
+                    <input type="hidden" name="pit_redirect_tab" value="wzorce">
+                    <?php $wzorce = $this->get_import_patterns_option(); ?>
+                    <table class="pit-table widefat striped" id="pit-wzorce-table">
+                        <thead>
+                            <tr>
+                                <th><?php esc_html_e( 'Szukam', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Strona', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Sekcja', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Pole', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th><?php esc_html_e( 'Nazwa pliku', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                                <th style="width: 90px; min-width: 90px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ( $wzorce as $idx => $row ) : ?>
+                                <tr class="pit-wzorce-row">
+                                    <td><input type="hidden" name="pit_import_patterns[<?php echo (int) $idx; ?>][_deleted]" value="0" class="pit-wzorce-deleted"><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][wzorzec]" value="<?php echo esc_attr( $row['wzorzec'] ); ?>" class="regular-text" placeholder="PESEL"></td>
+                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][strona]" value="<?php echo esc_attr( $row['strona'] ); ?>" class="small-text" placeholder="1" maxlength="10"></td>
+                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][pozycja]" class="pit-wzorce-field regular-text" placeholder="C. DANE IDENTYFIKACYJNE" rows="2"><?php echo esc_textarea( $row['pozycja'] ); ?></textarea></td>
+                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][pole]" class="pit-wzorce-field regular-text" placeholder="numer PESEL" rows="2"><?php echo esc_textarea( $row['pole'] ); ?></textarea></td>
+                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][nazwa_pliku]" class="pit-wzorce-field regular-text" placeholder="*.pdf" rows="2"><?php echo esc_textarea( $row['nazwa_pliku'] ?? '' ); ?></textarea></td>
+                                    <td style="white-space: nowrap;"><button type="button" class="button pit-remove-wzorce-row" aria-label="<?php esc_attr_e( 'Usuń wiersz', 'obsluga-dokumentow-ksiegowych' ); ?>"><?php esc_html_e( 'Usuń', 'obsluga-dokumentow-ksiegowych' ); ?></button></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <div class="pit-wzorce-actions" style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+                        <button type="button" class="button" id="pit-add-wzorce-row"><?php esc_html_e( 'Dodaj wiersz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                        <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-reset-patterns-form" style="display: inline; margin: 0;" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno przywrócić wszystkie domyślne wzorce? Obecna lista zostanie zastąpiona.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
+                            <?php wp_nonce_field( 'pit_reset_import_patterns', 'pit_reset_patterns_nonce' ); ?>
+                            <input type="hidden" name="action" value="pit_reset_import_patterns">
+                            <input type="hidden" name="pit_redirect_tab" value="wzorce">
+                            <button type="submit" class="button"><?php esc_html_e( 'Reset', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                        </form>
+                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                     </div>
                 </form>
+                <script>
+                (function() {
+                    var form = document.getElementById('pit-wzorce-form');
+                    var tbody = form && form.querySelector('#pit-wzorce-table tbody');
+                    var addBtn = document.getElementById('pit-add-wzorce-row');
+                    if (!tbody || !addBtn) return;
+                    addBtn.addEventListener('click', function() {
+                        var inputs = tbody.querySelectorAll('input[name^="pit_import_patterns["]');
+                        var maxIdx = -1;
+                        inputs.forEach(function(inp) {
+                            var m = inp.name.match(/pit_import_patterns\[(\d+)\]/);
+                            if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+                        });
+                        var idx = maxIdx + 1;
+                        var tr = document.createElement('tr');
+                        tr.className = 'pit-wzorce-row';
+                        tr.innerHTML = '<td><input type="hidden" name="pit_import_patterns[' + idx + '][_deleted]" value="0" class="pit-wzorce-deleted"><input type="text" name="pit_import_patterns[' + idx + '][wzorzec]" value="" class="regular-text" placeholder="PESEL"></td>' +
+                            '<td><input type="text" name="pit_import_patterns[' + idx + '][strona]" value="" class="small-text" placeholder="1" maxlength="10"></td>' +
+                            '<td><textarea name="pit_import_patterns[' + idx + '][pozycja]" class="pit-wzorce-field regular-text" placeholder="C. DANE IDENTYFIKACYJNE" rows="2"></textarea></td>' +
+                            '<td><textarea name="pit_import_patterns[' + idx + '][pole]" class="pit-wzorce-field regular-text" placeholder="numer PESEL" rows="2"></textarea></td>' +
+                            '<td><textarea name="pit_import_patterns[' + idx + '][nazwa_pliku]" class="pit-wzorce-field regular-text" placeholder="*.pdf" rows="2"></textarea></td>' +
+                            '<td><button type="button" class="button pit-remove-wzorce-row" aria-label="Usuń wiersz">Usuń</button></td>';
+                        tbody.appendChild(tr);
+                    });
+                    tbody.addEventListener('click', function(e) {
+                        if (e.target && e.target.classList && e.target.classList.contains('pit-remove-wzorce-row')) {
+                            var row = e.target.closest('tr');
+                            if (!row || tbody.querySelectorAll('.pit-wzorce-row').length <= 1) return;
+                            var deletedInput = row.querySelector('input.pit-wzorce-deleted');
+                            if (deletedInput) deletedInput.value = '1';
+                            row.style.display = 'none';
+                            form.submit();
+                        }
+                    });
+                })();
+                </script>
             </div>
 
             <div id="pit-tab-dane-firmy" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-dane-firmy" hidden>
@@ -920,110 +999,6 @@ class PIT_Accountant {
                     </div>
                     <div class="pit-form-row">
                         <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz zmiany', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-                    </div>
-                </form>
-            </div>
-
-            <div id="pit-tab-wzorce" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-wzorce" hidden>
-                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
-                <p class="description"><?php esc_html_e( 'Wzorce stosowane przy imporcie do wyszukiwania danych (np. PESEL) w dokumentach. Strona – numer strony, Sekcja – np. sekcja formularza, Pole – etykieta pola.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
-                <?php if ( isset( $_GET['pit_patterns_saved'] ) && $_GET['pit_patterns_saved'] === '1' ) : ?>
-                    <div class="notice notice-success is-dismissible" style="margin-top: 10px;"><p><?php esc_html_e( 'Wzorce zapisane.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
-                <?php endif; ?>
-                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-wzorce-form" style="margin-top: 10px;">
-                    <?php wp_nonce_field( 'pit_save_import_patterns', 'pit_import_patterns_nonce' ); ?>
-                    <input type="hidden" name="action" value="pit_save_import_patterns">
-                    <?php $wzorce = $this->get_import_patterns_option(); ?>
-                    <table class="pit-table widefat striped" id="pit-wzorce-table">
-                        <thead>
-                            <tr>
-                                <th><?php esc_html_e( 'Szukm.', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th><?php esc_html_e( 'Strona', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th><?php esc_html_e( 'Sekcja', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th><?php esc_html_e( 'Pole', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th><?php esc_html_e( 'Nazwa pliku', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                                <th style="width: 90px; min-width: 90px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ( $wzorce as $idx => $row ) : ?>
-                                <tr class="pit-wzorce-row">
-                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][wzorzec]" value="<?php echo esc_attr( $row['wzorzec'] ); ?>" class="regular-text" placeholder="PESEL"></td>
-                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][strona]" value="<?php echo esc_attr( $row['strona'] ); ?>" class="small-text" placeholder="1" maxlength="10"></td>
-                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][pozycja]" value="<?php echo esc_attr( $row['pozycja'] ); ?>" class="regular-text" placeholder="C. DANE IDENTYFIKACYJNE"></td>
-                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][pole]" value="<?php echo esc_attr( $row['pole'] ); ?>" class="regular-text" placeholder="numer PESEL"></td>
-                                    <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][nazwa_pliku]" value="<?php echo esc_attr( $row['nazwa_pliku'] ?? '' ); ?>" class="regular-text" placeholder="*.pdf"></td>
-                                    <td style="white-space: nowrap;"><button type="button" class="button pit-remove-wzorce-row" aria-label="<?php esc_attr_e( 'Usuń wiersz', 'obsluga-dokumentow-ksiegowych' ); ?>"><?php esc_html_e( 'Usuń', 'obsluga-dokumentow-ksiegowych' ); ?></button></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                    <p style="margin-top: 8px;">
-                        <button type="button" class="button" id="pit-add-wzorce-row"><?php esc_html_e( 'Dodaj wiersz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-                    </p>
-                    <div class="pit-form-row" style="margin-top: 12px;">
-                        <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-                    </div>
-                </form>
-                <script>
-                (function() {
-                    var form = document.getElementById('pit-wzorce-form');
-                    var tbody = form && form.querySelector('#pit-wzorce-table tbody');
-                    var addBtn = document.getElementById('pit-add-wzorce-row');
-                    if (!tbody || !addBtn) return;
-                    addBtn.addEventListener('click', function() {
-                        var inputs = tbody.querySelectorAll('input[name^="pit_import_patterns["]');
-                        var maxIdx = -1;
-                        inputs.forEach(function(inp) {
-                            var m = inp.name.match(/pit_import_patterns\[(\d+)\]/);
-                            if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
-                        });
-                        var idx = maxIdx + 1;
-                        var tr = document.createElement('tr');
-                        tr.className = 'pit-wzorce-row';
-                        tr.innerHTML = '<td><input type="text" name="pit_import_patterns[' + idx + '][wzorzec]" value="" class="regular-text" placeholder="PESEL"></td>' +
-                            '<td><input type="text" name="pit_import_patterns[' + idx + '][strona]" value="" class="small-text" placeholder="1" maxlength="10"></td>' +
-                            '<td><input type="text" name="pit_import_patterns[' + idx + '][pozycja]" value="" class="regular-text" placeholder="C. DANE IDENTYFIKACYJNE"></td>' +
-                            '<td><input type="text" name="pit_import_patterns[' + idx + '][pole]" value="" class="regular-text" placeholder="numer PESEL"></td>' +
-                            '<td><input type="text" name="pit_import_patterns[' + idx + '][nazwa_pliku]" value="" class="regular-text" placeholder="*.pdf"></td>' +
-                            '<td><button type="button" class="button pit-remove-wzorce-row" aria-label="Usuń wiersz">Usuń</button></td>';
-                        tbody.appendChild(tr);
-                    });
-                    tbody.addEventListener('click', function(e) {
-                        if (e.target && e.target.classList && e.target.classList.contains('pit-remove-wzorce-row')) {
-                            var row = e.target.closest('tr');
-                            if (row && tbody.querySelectorAll('.pit-wzorce-row').length > 1) row.remove();
-                        }
-                    });
-                })();
-                </script>
-            </div>
-
-            <div id="pit-tab-raport" class="pit-tab-panel" role="tabpanel" aria-labelledby="pit-tab-btn-raport" hidden>
-                <h3 class="pit-tab-panel-title"><?php esc_html_e( 'Raport', 'obsluga-dokumentow-ksiegowych' ); ?></h3>
-                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                    <?php wp_nonce_field( 'pit_report_pdf_nonce', 'pit_report_pdf_nonce' ); ?>
-                    <input type="hidden" name="action" value="pit_generate_report_pdf">
-
-                    <div class="pit-form-row">
-                        <label for="pit-report-year"><?php esc_html_e( 'Wybierz rok:', 'obsluga-dokumentow-ksiegowych' ); ?></label>
-                        <select name="year" id="pit-report-year">
-                            <option value="0"><?php esc_html_e( 'Wszystkie lata', 'obsluga-dokumentow-ksiegowych' ); ?></option>
-                            <?php
-                            $years = $db->get_available_years();
-                            foreach ( $years as $y ) :
-                            ?>
-                                <option value="<?php echo esc_attr( $y ); ?>">
-                                    <?php echo esc_html( $y ); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="pit-form-row">
-                        <button type="submit" class="button">
-                            <?php esc_html_e( 'Generuj raport PDF', 'obsluga-dokumentow-ksiegowych' ); ?>
-                        </button>
                     </div>
                 </form>
             </div>
@@ -1634,37 +1609,6 @@ class PIT_Accountant {
     }
 
     /**
-     * Zapisuje filtry nazw plików z zakładki Filtry plików.
-     */
-    public function handle_save_filename_filters(): void {
-        if ( ! $this->check_access() ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
-        }
-
-        if ( ! wp_verify_nonce( $_POST['pit_filename_filters_nonce'] ?? '', 'pit_save_filename_filters' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
-        }
-
-        $input = isset( $_POST['pit_filename_filters'] ) && is_string( $_POST['pit_filename_filters'] )
-            ? $_POST['pit_filename_filters']
-            : '';
-        $lines = preg_split( '/\r\n|\r|\n/', $input );
-        $out   = [];
-        foreach ( $lines as $line ) {
-            $s = sanitize_text_field( is_string( $line ) ? $line : '' );
-            $s = trim( $s );
-            if ( $s !== '' ) {
-                $out[] = $s;
-            }
-        }
-        update_option( 'pit_filename_filters', array_values( $out ) );
-
-        $redirect = add_query_arg( 'pit_filters_saved', '1', wp_get_referer() ?: home_url() );
-        wp_redirect( esc_url_raw( $redirect ) );
-        exit;
-    }
-
-    /**
      * Zapisuje dane firmy z zakładki Dane firmy.
      */
     public function handle_save_company_data(): void {
@@ -1708,6 +1652,9 @@ class PIT_Accountant {
             if ( ! is_array( $row ) ) {
                 continue;
             }
+            if ( isset( $row['_deleted'] ) && (string) $row['_deleted'] === '1' ) {
+                continue;
+            }
             $wzorzec     = isset( $row['wzorzec'] ) ? sanitize_text_field( (string) $row['wzorzec'] ) : '';
             $strona      = isset( $row['strona'] ) ? sanitize_text_field( (string) $row['strona'] ) : '';
             $pozycja     = isset( $row['pozycja'] ) ? sanitize_text_field( (string) $row['pozycja'] ) : '';
@@ -1719,16 +1666,38 @@ class PIT_Accountant {
             $patterns[] = [ 'wzorzec' => $wzorzec, 'strona' => $strona, 'pozycja' => $pozycja, 'pole' => $pole, 'nazwa_pliku' => $nazwa_pliku ];
         }
         if ( empty( $patterns ) ) {
-            $patterns = [
-                [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSIKO IMIE*PIT-11*.pdf' ],
-                [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
-                [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
-                [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'IMIĘ', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
-            ];
+            $patterns = $this->get_default_import_patterns();
         }
         update_option( 'pit_import_patterns', array_values( $patterns ) );
 
         $redirect = add_query_arg( 'pit_patterns_saved', '1', wp_get_referer() ?: home_url() );
+        $tab = isset( $_POST['pit_redirect_tab'] ) ? sanitize_key( (string) $_POST['pit_redirect_tab'] ) : '';
+        if ( $tab !== '' && in_array( $tab, [ 'lista', 'upload', 'wzorce', 'dane-firmy' ], true ) ) {
+            $redirect = add_query_arg( 'pit_tab', $tab, $redirect );
+        }
+        wp_safe_redirect( esc_url_raw( $redirect ) );
+        exit;
+    }
+
+    /**
+     * Przywraca domyślne wzorce importu (przycisk Reset w zakładce Wzorce).
+     */
+    public function handle_reset_import_patterns(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_reset_patterns_nonce'] ?? '', 'pit_reset_import_patterns' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        update_option( 'pit_import_patterns', array_values( $this->get_default_import_patterns() ) );
+
+        $redirect = add_query_arg( 'pit_patterns_reset', '1', wp_get_referer() ?: home_url() );
+        $tab = isset( $_POST['pit_redirect_tab'] ) ? sanitize_key( (string) $_POST['pit_redirect_tab'] ) : '';
+        if ( $tab !== '' && in_array( $tab, [ 'lista', 'upload', 'wzorce', 'dane-firmy' ], true ) ) {
+            $redirect = add_query_arg( 'pit_tab', $tab, $redirect );
+        }
         wp_safe_redirect( esc_url_raw( $redirect ) );
         exit;
     }
