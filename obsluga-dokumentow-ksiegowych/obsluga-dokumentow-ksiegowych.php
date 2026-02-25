@@ -287,6 +287,11 @@ register_deactivation_hook( __FILE__, 'pit_deactivate_plugin' );
 
 /**
  * Inicjalizacja klas wtyczki po załadowaniu wszystkich wtyczek WordPress.
+ *
+ * Na serwerze produkcyjnym: jeśli strona z shortcode [pit_accountant_panel] lub [pit_client_page]
+ * jest pusta, sprawdź: (1) Czy w Ustawieniach wtyczki przełącznik „Włącz pobieranie” jest ON,
+ * (2) Czy cache pełnostronicowy (wtyczka/CDN/serwer) nie serwuje starej wersji – wyklucz
+ * ścieżki /ksiegowy i /podatnik z cache lub wyczyść cache po zmianach.
  */
 function pit_init_plugin(): void {
 	PIT_Database::get_instance();

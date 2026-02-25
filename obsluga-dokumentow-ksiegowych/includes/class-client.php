@@ -80,6 +80,9 @@ class PIT_Client {
      */
     public function render_shortcode(): string {
         if ( ! get_option( 'pit_enabled', 1 ) ) {
+            if ( current_user_can( 'manage_options' ) ) {
+                return '<p class="pit-error">' . esc_html__( 'Wtyczka „Obsługa dokumentów księgowych” jest wyłączona. Włącz ją w Narzędzia → Obsługa dokumentów księgowych.', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
+            }
             return '';
         }
 
