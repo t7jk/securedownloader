@@ -3,7 +3,7 @@
  * Plugin Name: Obsługa dokumentów księgowych
  * Plugin URI:  https://example.com/obsluga-dokumentow-ksiegowych
  * Description: Wtyczka umożliwia księgowym wgrywanie dokumentów księgowych, a podatnikom ich pobieranie po weryfikacji danych osobowych.
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      Tomasz Kalinowski
  * Author URI:  https://example.com
  * Text Domain: obsluga-dokumentow-ksiegowych
@@ -15,8 +15,6 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 // Definicje stałych wtyczki
-define( 'PIT_VERSION',    '1.1.0' );
-define( 'PIT_BUILD',       6); // Zwiększ przy każdym wydaniu (widoczne w Narzędzia → Obsługa dokumentów księgowych).
 define( 'PIT_UPLOAD_CHUNK_SIZE', 5 ); // Maks. plików w jednym żądaniu (omija limit PHP max_file_uploads).
 define( 'PIT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PIT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -66,8 +64,20 @@ function pit_activate_plugin(): void {
         add_option( 'pit_filename_filters', pit_get_default_filename_filters() );
     }
 
-    // Zapisz wersję wtyczki
-    update_option( 'pit_version', PIT_VERSION );
+    // Zapisz wersję wtyczki (z nagłówka Plugin)
+    update_option( 'pit_version', pit_plugin_version() );
+}
+
+/**
+ * Zwraca wersję wtyczki z nagłówka pliku (np. dla cache-bustingu assetów).
+ */
+function pit_plugin_version(): string {
+    static $version = null;
+    if ( $version === null ) {
+        $data    = get_file_data( __FILE__, [ 'Version' => 'Version' ], 'plugin' );
+        $version = isset( $data['Version'] ) && $data['Version'] !== '' ? $data['Version'] : '1.0.0';
+    }
+    return $version;
 }
 
 /**
@@ -289,9 +299,8 @@ register_deactivation_hook( __FILE__, 'pit_deactivate_plugin' );
  * Inicjalizacja klas wtyczki po załadowaniu wszystkich wtyczek WordPress.
  *
  * Na serwerze produkcyjnym: jeśli strona z shortcode [pit_accountant_panel] lub [pit_client_page]
- * jest pusta, sprawdź: (1) Czy w Ustawieniach wtyczki przełącznik „Włącz pobieranie” jest ON,
- * (2) Czy cache pełnostronicowy (wtyczka/CDN/serwer) nie serwuje starej wersji – wyklucz
- * ścieżki /ksiegowy i /podatnik z cache lub wyczyść cache po zmianach.
+ * jest pusta, sprawdź cache pełnostronicowy (wtyczka/CDN/serwer) – wyklucz ścieżki /ksiegowy
+ * i /podatnik z cache lub wyczyść cache po zmianach.
  */
 function pit_init_plugin(): void {
 	PIT_Database::get_instance();

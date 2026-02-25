@@ -76,7 +76,7 @@ class PIT_Database {
 		dbDelta( $sql_files );
 		dbDelta( $sql_downloads );
 
-		update_option( 'pit_db_version', PIT_VERSION );
+		update_option( 'pit_db_version', pit_plugin_version() );
 	}
 
 	/**

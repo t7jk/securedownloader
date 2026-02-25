@@ -51,14 +51,14 @@ class PIT_Client {
                 'obsluga-dokumentow-ksiegowych-style',
                 PIT_PLUGIN_URL . 'assets/style.css',
                 [],
-                PIT_VERSION
+                pit_plugin_version()
             );
 
             wp_enqueue_script(
                 'obsluga-dokumentow-ksiegowych-script',
                 PIT_PLUGIN_URL . 'assets/script.js',
                 [ 'jquery' ],
-                PIT_VERSION,
+                pit_plugin_version(),
                 true
             );
 
@@ -79,13 +79,6 @@ class PIT_Client {
      * @return string HTML strony.
      */
     public function render_shortcode(): string {
-        if ( ! get_option( 'pit_enabled', 1 ) ) {
-            if ( current_user_can( 'manage_options' ) ) {
-                return '<p class="pit-error">' . esc_html__( 'Wtyczka „Obsługa dokumentów księgowych” jest wyłączona. Włącz ją w Narzędzia → Obsługa dokumentów księgowych.', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
-            }
-            return '';
-        }
-
         $company_name    = get_option( 'pit_company_name', '' );
         $company_address = get_option( 'pit_company_address', '' );
         $company_nip     = get_option( 'pit_company_nip', '' );

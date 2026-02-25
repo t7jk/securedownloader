@@ -56,6 +56,7 @@ delete_option( 'pit_company_address' );
 delete_option( 'pit_company_nip' );
 delete_option( 'pit_filename_filters' );
 delete_option( 'pit_version' );
+delete_option( 'pit_enabled' );
 
 $admin = get_role( 'administrator' );
 if ( $admin ) {

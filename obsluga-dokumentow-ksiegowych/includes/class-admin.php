@@ -19,6 +19,7 @@ class PIT_Admin {
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'admin_post_pit_delete_file', [ $this, 'handle_delete_file' ] );
         add_action( 'admin_post_pit_create_page', [ $this, 'handle_create_page' ] );
+        add_action( 'admin_post_pit_remove_one_accountant', [ $this, 'handle_remove_one_accountant' ] );
         add_action( 'update_option_pit_accountant_users', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_accountant_page_url', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_client_page_url', [ $this, 'redirect_after_save' ] );
@@ -53,9 +54,6 @@ class PIT_Admin {
      * Rejestruje ustawienia wtyczki.
      */
     public function register_settings(): void {
-        register_setting( 'pit_options_group', 'pit_enabled', [
-            'sanitize_callback' => [ $this, 'sanitize_checkbox' ],
-        ] );
         register_setting( 'pit_options_group', 'pit_accountant_users', [
             'sanitize_callback' => [ $this, 'sanitize_user_ids' ],
         ] );
@@ -87,7 +85,7 @@ class PIT_Admin {
 
         add_settings_field(
             'pit_accountant_page_url',
-            __( 'URL strony księgowego', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Adres strony dla księgowego', 'obsluga-dokumentow-ksiegowych' ),
             [ $this, 'render_field_url' ],
             'obsluga-dokumentow-ksiegowych-settings',
             'pit_main_settings',
@@ -100,7 +98,7 @@ class PIT_Admin {
 
         add_settings_field(
             'pit_client_page_url',
-            __( 'URL strony podatnika', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Adres strony dla podatnika', 'obsluga-dokumentow-ksiegowych' ),
             [ $this, 'render_field_url' ],
             'obsluga-dokumentow-ksiegowych-settings',
             'pit_main_settings',
@@ -113,13 +111,13 @@ class PIT_Admin {
 
         add_settings_field(
             'pit_accountant_users',
-            __( 'Wybierz księgowego', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Kto jest księgowym', 'obsluga-dokumentow-ksiegowych' ),
             [ $this, 'render_field_users' ],
             'obsluga-dokumentow-ksiegowych-settings',
             'pit_main_settings',
             [ 
                 'name'        => 'pit_accountant_users',
-                'description' => __( 'Wybierz użytkownika i kliknij "Zapisz zmiany", aby dodać go do listy księgowych.', 'obsluga-dokumentow-ksiegowych' )
+                'description' => __( 'Wybierz użytkownika i kliknij "Dodaj księgowego", aby dodać go do listy księgowych.', 'obsluga-dokumentow-ksiegowych' )
             ]
         );
 
@@ -201,46 +199,48 @@ class PIT_Admin {
         }
     }
 
-    public function render_field_toggle( array $args ): void {
-        $name  = $args['name'];
-        $value = get_option( $name, 1 );
-        $checked = checked( 1, $value, false );
-        echo '<label class="pit-toggle">';
-        printf( '<input type="checkbox" name="%s" value="1" %s>', esc_attr( $name ), $checked );
-        echo '<span class="pit-toggle-slider"></span>';
-        echo '</label>';
-        echo '<span class="pit-toggle-label">' . ( $value ? esc_html__( 'ON', 'obsluga-dokumentow-ksiegowych' ) : esc_html__( 'OFF', 'obsluga-dokumentow-ksiegowych' ) ) . '</span>';
-    }
-
-    public function sanitize_checkbox( $input ): int {
-        return empty( $input ) ? 0 : 1;
-    }
-
     public function sanitize_user_ids( $input ): array {
-        $existing_ids = get_option( 'pit_accountant_users', [] );
-        if ( ! is_array( $existing_ids ) ) {
-            $existing_ids = [];
+        try {
+            $existing_ids = get_option( 'pit_accountant_users', [] );
+            if ( ! is_array( $existing_ids ) ) {
+                $existing_ids = [];
+            }
+            $existing_ids = array_map( 'intval', $existing_ids );
+
+            $remove_ids = [];
+            if ( isset( $_POST['pit_remove_accountants'] ) && is_array( $_POST['pit_remove_accountants'] ) ) {
+                $remove_ids = array_map( 'intval', $_POST['pit_remove_accountants'] );
+            }
+            $remove_ids = array_filter( $remove_ids );
+
+            $existing_ids = array_filter( $existing_ids, function( $id ) use ( $remove_ids ) {
+                return $id > 0 && ! in_array( (int) $id, $remove_ids, true );
+            } );
+
+            $new_ids = [];
+            if ( is_array( $input ) ) {
+                $new_ids = array_map( 'intval', array_filter( $input, 'is_numeric' ) );
+            } elseif ( is_numeric( $input ) && (int) $input > 0 ) {
+                $new_ids = [ (int) $input ];
+            }
+
+            foreach ( $new_ids as $uid ) {
+                if ( $uid > 0 && get_user_by( 'id', $uid ) && ! in_array( $uid, $existing_ids, true ) ) {
+                    $existing_ids[] = $uid;
+                }
+            }
+
+            $result = array_values( array_unique( array_filter( $existing_ids, function( $id ) {
+                return (int) $id > 0;
+            } ) ) );
+            return $result;
+        } catch ( \Throwable $e ) {
+            if ( function_exists( 'error_log' ) ) {
+                error_log( '[PIT] sanitize_user_ids: ' . $e->getMessage() );
+            }
+            $fallback = get_option( 'pit_accountant_users', [] );
+            return is_array( $fallback ) ? array_values( array_map( 'intval', $fallback ) ) : [];
         }
-
-        $remove_ids = [];
-        if ( isset( $_POST['pit_remove_accountants'] ) && is_array( $_POST['pit_remove_accountants'] ) ) {
-            $remove_ids = array_map( 'intval', $_POST['pit_remove_accountants'] );
-        }
-
-        $existing_ids = array_filter( $existing_ids, fn( $id ) => ! in_array( $id, $remove_ids, true ) );
-
-        $new_id = 0;
-        if ( is_array( $input ) && ! empty( $input ) ) {
-            $new_id = (int) $input[0];
-        } elseif ( is_numeric( $input ) ) {
-            $new_id = (int) $input;
-        }
-
-        if ( $new_id > 0 && get_user_by( 'id', $new_id ) ) {
-            $existing_ids[] = $new_id;
-        }
-
-        return array_unique( array_filter( $existing_ids ) );
     }
 
     public function render_field_users( array $args ): void {
@@ -260,12 +260,13 @@ class PIT_Admin {
             return;
         }
 
+        echo '<p class="description">' . esc_html__( 'Dodaj księgowych: wybierz jednego lub wielu (Ctrl+klik) z listy, następnie kliknij „Dodaj księgowego”.', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
+        echo '<div style="display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-top: 8px;">';
+        printf( '<input type="hidden" name="%s[]" value="">', esc_attr( $name ) );
         printf(
-            '<select name="%s[]" style="min-width: 300px;">',
+            '<select name="%s[]" multiple="multiple" size="10" style="min-width: 280px;">',
             esc_attr( $name )
         );
-        echo '<option value="">' . esc_html__( '— Wybierz księgowego —', 'obsluga-dokumentow-ksiegowych' ) . '</option>';
-        
         foreach ( $users as $user ) {
             if ( in_array( $user->ID, $selected_ids, true ) ) {
                 continue;
@@ -277,36 +278,40 @@ class PIT_Admin {
             );
         }
         echo '</select>';
-
-        if ( ! empty( $args['description'] ) ) {
-            printf( '<p class="description">%s</p>', esc_html( $args['description'] ) );
-        }
+        submit_button( __( 'Dodaj księgowego', 'obsluga-dokumentow-ksiegowych' ), 'primary', 'submit', false, [ 'style' => 'width: auto;' ] );
+        echo '</div>';
 
         if ( ! empty( $selected_ids ) ) {
-            echo '<h4 style="margin-top: 15px; margin-bottom: 5px;">' . esc_html__( 'Lista obecnych księgowych:', 'obsluga-dokumentow-ksiegowych' ) . '</h4>';
-            echo '<table class="wp-list-table widefat fixed striped" style="max-width: 400px;">';
-            echo '<thead><tr><th>' . esc_html__( 'Login', 'obsluga-dokumentow-ksiegowych' ) . '</th><th style="width: 80px;">' . esc_html__( 'Usunięcie', 'obsluga-dokumentow-ksiegowych' ) . '</th></tr></thead>';
+            echo '<h4 style="margin-top: 20px; margin-bottom: 8px;">' . esc_html__( 'Lista księgowych', 'obsluga-dokumentow-ksiegowych' ) . '</h4>';
+            echo '<table class="wp-list-table widefat fixed striped" style="max-width: 450px;">';
+            echo '<thead><tr><th>' . esc_html__( 'Login', 'obsluga-dokumentow-ksiegowych' ) . '</th><th style="width: 100px;">' . esc_html__( 'Usuń', 'obsluga-dokumentow-ksiegowych' ) . '</th></tr></thead>';
             echo '<tbody>';
             foreach ( $selected_ids as $user_id ) {
                 $user = get_user_by( 'id', $user_id );
                 if ( ! $user ) continue;
+                $remove_url = wp_nonce_url(
+                    admin_url( 'admin-post.php?action=pit_remove_one_accountant&user_id=' . (int) $user_id ),
+                    'pit_remove_accountant_' . (int) $user_id
+                );
                 echo '<tr>';
                 echo '<td>' . esc_html( $user->user_login ) . '</td>';
                 echo '<td style="text-align: center;">';
                 printf(
-                    '<input type="checkbox" name="pit_remove_accountants[]" value="%d">',
-                    $user_id
+                    '<a href="%s" class="button button-small" aria-label="%s">%s</a>',
+                    esc_url( $remove_url ),
+                    esc_attr( sprintf( __( 'Usuń %s z listy księgowych', 'obsluga-dokumentow-ksiegowych' ), $user->user_login ) ),
+                    esc_html__( 'Usuń', 'obsluga-dokumentow-ksiegowych' )
                 );
                 echo '</td>';
                 echo '</tr>';
             }
             echo '</tbody></table>';
-            echo '<p class="description">' . esc_html__( 'Zaznacz księgowych do usunięcia i kliknij "Zapisz zmiany".', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
         }
     }
 
-    public function sanitize_nip( string $input ): string {
-        $nip = preg_replace( '/[^0-9]/', '', $input );
+    public function sanitize_nip( $input ): string {
+        $input = is_string( $input ) ? $input : ( is_scalar( $input ) ? (string) $input : '' );
+        $nip   = preg_replace( '/[^0-9]/', '', $input );
         return substr( $nip, 0, 10 );
     }
 
@@ -322,14 +327,14 @@ class PIT_Admin {
             'obsluga-dokumentow-ksiegowych-style',
             PIT_PLUGIN_URL . 'assets/style.css',
             [],
-            PIT_VERSION
+            pit_plugin_version()
         );
 
         wp_enqueue_script(
             'obsluga-dokumentow-ksiegowych-script',
             PIT_PLUGIN_URL . 'assets/script.js',
             [ 'jquery' ],
-            PIT_VERSION,
+            pit_plugin_version(),
             true
         );
 
@@ -338,6 +343,7 @@ class PIT_Admin {
             'nonce'         => wp_create_nonce( 'pit_manager_nonce' ),
             'confirmDelete' => __( 'Czy na pewno usunąć ten plik?', 'obsluga-dokumentow-ksiegowych' ),
         ] );
+
     }
 
     /**
@@ -486,17 +492,7 @@ class PIT_Admin {
         ?>
         <div class="wrap obsluga-dokumentow-ksiegowych-wrap">
             <h1><?php esc_html_e( 'Ustawienia', 'obsluga-dokumentow-ksiegowych' ); ?></h1>
-            <p class="description" style="margin-top: -8px;">
-                <?php
-                printf(
-                    /* translators: 1: version number, 2: build number */
-                    esc_html__( 'Wersja %1$s (Build %2$s)', 'obsluga-dokumentow-ksiegowych' ),
-                    esc_html( PIT_VERSION ),
-                    esc_html( (string) PIT_BUILD )
-                );
-                ?>
-            </p>
-
+            
             <?php
             // Komunikaty po kliknięciu „Dodaj stronę” (księgowego / podatnika)
             if ( isset( $_GET['page_created'] ) && $_GET['page_created'] === '1' ) :
@@ -508,6 +504,9 @@ class PIT_Admin {
             <?php endif; ?>
             <?php if ( isset( $_GET['page_linked'] ) && $_GET['page_linked'] === '1' ) : ?>
                 <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Strona o tym adresie już istniała; adres został zapisany w ustawieniach.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+            <?php endif; ?>
+            <?php if ( isset( $_GET['pit_accountant_removed'] ) && $_GET['pit_accountant_removed'] === '1' ) : ?>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Księgowy został usunięty z listy.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
             <?php endif; ?>
             <?php if ( isset( $_GET['error'] ) ) : ?>
                 <div class="notice notice-error is-dismissible">
@@ -562,12 +561,11 @@ class PIT_Admin {
                 </div>
             <?php endif; ?>
 
-            <form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+            <form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>" id="pit-settings-form">
                 <?php
                 settings_fields( 'pit_options_group' );
                 echo '<input type="hidden" name="_wp_http_referer" value="' . esc_attr( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) ) . '">';
                 do_settings_sections( 'obsluga-dokumentow-ksiegowych-settings' );
-                submit_button();
                 ?>
             </form>
         </div>
@@ -619,6 +617,41 @@ class PIT_Admin {
         add_action( 'admin_notices', function() {
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ustawienia zapisane.', 'obsluga-dokumentow-ksiegowych' ) . '</p></div>';
         } );
+    }
+
+    /**
+     * Usuwa jednego księgowego z listy (wywołane przyciskiem „Usuń” w wierszu).
+     */
+    public function handle_remove_one_accountant(): void {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $user_id = isset( $_REQUEST['user_id'] ) ? (int) $_REQUEST['user_id'] : 0;
+        if ( $user_id <= 0 ) {
+            wp_safe_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) );
+            exit;
+        }
+
+        if ( ! wp_verify_nonce( $_REQUEST['_wpnonce'] ?? '', 'pit_remove_accountant_' . $user_id ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $ids = get_option( 'pit_accountant_users', [] );
+        if ( ! is_array( $ids ) ) {
+            $ids = [];
+        }
+        $ids = array_values( array_filter( array_map( 'intval', $ids ), function( $id ) {
+            return $id > 0;
+        } ) );
+        $ids = array_values( array_diff( $ids, [ $user_id ] ) );
+
+        // Wymuszenie zapisu (delete + add omija ewentualne problemy z cache/porównaniem w update_option).
+        delete_option( 'pit_accountant_users' );
+        add_option( 'pit_accountant_users', $ids );
+
+        wp_safe_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&pit_accountant_removed=1' ) );
+        exit;
     }
 
     /**
