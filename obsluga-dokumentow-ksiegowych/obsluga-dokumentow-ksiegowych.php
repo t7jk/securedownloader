@@ -15,8 +15,8 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 // Definicje stałych wtyczki
-define( 'PIT_VERSION',    '1.0.0' );
-define( 'PIT_BUILD',      1 ); // Zwiększ przy każdym wydaniu (widoczne w Narzędzia → Obsługa dokumentów księgowych).
+define( 'PIT_VERSION',    '1.1.0' );
+define( 'PIT_BUILD',       6); // Zwiększ przy każdym wydaniu (widoczne w Narzędzia → Obsługa dokumentów księgowych).
 define( 'PIT_UPLOAD_CHUNK_SIZE', 5 ); // Maks. plików w jednym żądaniu (omija limit PHP max_file_uploads).
 define( 'PIT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PIT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
