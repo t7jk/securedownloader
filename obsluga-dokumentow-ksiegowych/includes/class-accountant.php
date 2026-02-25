@@ -364,7 +364,7 @@ class PIT_Accountant {
      */
     private function get_default_import_patterns(): array {
         return [
-            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWSKO IMIE*PIT-11*.pdf' ],
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => '*PIT-11*.pdf' ],
             [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
             [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
             [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Imię', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
@@ -408,7 +408,7 @@ class PIT_Accountant {
      * Sprawdza, czy nazwa pliku pasuje do wzorca (wzorzec może zawierać * jako wildcard).
      *
      * @param string $filename Nazwa pliku (np. Kowalski Jan PIT-11 2024.pdf).
-     * @param string $pattern  Wzorzec (np. NAZWSIKO IMIE*PIT-11*.pdf).
+     * @param string $pattern  Wzorzec (np. *PIT-11*.pdf lub Informacja roczna dla*.pdf).
      * @return bool
      */
     private function filename_matches_pattern( string $filename, string $pattern ): bool {
@@ -418,7 +418,10 @@ class PIT_Accountant {
         $parts = explode( '*', $pattern );
         $regex = '';
         foreach ( $parts as $part ) {
-            $regex .= preg_quote( $part, '/' );
+            $quoted = preg_quote( $part, '/' );
+            // Nazwy plików po sanitize_file_name() mają spacje zamienione na myślniki – traktuj spację i myślnik jako równoważne.
+            $quoted = str_replace( ' ', '[ \\x2d]+', $quoted );
+            $regex .= $quoted;
             $regex .= '.*';
         }
         $regex = rtrim( $regex, '.*' );
@@ -438,12 +441,14 @@ class PIT_Accountant {
             if ( ( $p['wzorzec'] === '' && $p['pozycja'] === '' && $p['pole'] === '' ) ) {
                 continue;
             }
+            $nazwa_pliku = $p['nazwa_pliku'] ?? '';
+            $nazwa_naglowka = ( $nazwa_pliku !== '' && stripos( $nazwa_pliku, 'Informacja' ) !== false ) ? 'Informacja' : 'PIT-11';
             $from_patterns[] = [
                 'szukany_numer'  => $p['wzorzec'] !== '' ? $p['wzorzec'] : 'PESEL',
-                'nazwa_naglowka' => 'PIT-11',
+                'nazwa_naglowka' => $nazwa_naglowka,
                 'nazwa_sekcji'   => $p['pozycja'],
                 'nr_pola'        => $p['pole'],
-                'nazwa_pliku'    => $p['nazwa_pliku'] ?? '',
+                'nazwa_pliku'    => $nazwa_pliku,
             ];
         }
         if ( ! empty( $from_patterns ) ) {
