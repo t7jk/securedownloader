@@ -1,0 +1,11 @@
+{
+    "name": "obsluga-dokumentow-ksiegowych/plugin",
+    "description": "Obsługa dokumentów księgowych – zależności (fallback ekstrakcji tekstu z PDF). Przed wgraniem wtyczki na serwer uruchom: composer install --no-dev",
+    "require": {
+        "php": ">=7.4",
+        "smalot/pdfparser": "^2.0"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

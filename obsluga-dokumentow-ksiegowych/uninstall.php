@@ -34,11 +34,17 @@ function pit_uninstall_rmdir( $dir ) {
 	@rmdir( $dir );
 }
 
-$upload_dir      = wp_upload_dir();
-$pit_upload_dir  = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
-
+// Katalog uploads wtyczki (plugins/obsluga-dokumentow-ksiegowych/uploads/)
+$pit_upload_dir = dirname( __FILE__ ) . '/uploads/';
 if ( is_dir( $pit_upload_dir ) ) {
 	pit_uninstall_rmdir( $pit_upload_dir );
+}
+
+// Stara lokalizacja w wp-content/uploads (na wypadek migracji)
+$upload_dir     = wp_upload_dir();
+$legacy_pit_dir = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
+if ( is_dir( $legacy_pit_dir ) ) {
+	pit_uninstall_rmdir( $legacy_pit_dir );
 }
 
 $table_files     = $wpdb->prefix . 'pit_files';

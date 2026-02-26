@@ -264,14 +264,17 @@ body.pit-client-fullscreen .pit-client-page {
     color: var(--pit-text);
 }
 
-.pit-upload-debug-log {
+/* Log wgrywania i PESEL – czytelna czcionka w oknie logu */
+.pit-upload-debug-log,
+pre.pit-upload-debug-log,
+.pit-upload-debug-wrap .pit-upload-debug-log {
     display: block;
     width: 100%;
     max-height: 280px;
     overflow: auto;
     margin: 0;
     padding: 10px 12px;
-    font-size: 12px;
+    font-size: 12px !important;
     line-height: 1.4;
     font-family: ui-monospace, monospace;
     background: #1e1e1e;
@@ -282,6 +285,15 @@ body.pit-client-fullscreen .pit-client-page {
     word-break: break-word;
     user-select: text;
     -webkit-user-select: text;
+}
+
+/* Komunikat diagnostyki PESEL (żółty blok „Osoba: …”) – czcionka 2× mniejsza */
+/* Komunikat diagnostyki PESEL – ten sam rozmiar czcionki co w komunikatach zielonych/sukces */
+.pit-accountant-panel .pit-message.pit-warning.pit-pesel-diagnostics,
+.pit-accountant-panel .pit-message.pit-warning.pit-pesel-diagnostics p,
+.pit-accountant-panel .pit-message.pit-warning.pit-pesel-diagnostics ul,
+.pit-accountant-panel .pit-message.pit-warning.pit-pesel-diagnostics li {
+    font-size: 1em !important;
 }
 
 /* Imię i nazwisko w liście dokumentów – pogrubione, wielkie litery (wysoka specyficzność) */
@@ -473,12 +485,57 @@ body.pit-client-fullscreen .pit-client-page {
     border-color: #8a2324 !important;
 }
 
-/* Komunikaty */
+.pit-btn-delete-all {
+    background: #b32d2e !important;
+    color: #fff !important;
+    border-color: #b32d2e !important;
+    padding: 10px 20px;
+    font-weight: 600;
+}
+
+.pit-btn-delete-all:hover {
+    background: #8a2324 !important;
+    color: #fff !important;
+    border-color: #8a2324 !important;
+}
+
+/* Komunikaty – z przyciskiem zamknięcia */
 .pit-message {
-    padding: 15px 20px;
+    position: relative;
+    padding: 15px 36px 15px 20px;
     margin: 15px 0;
     border-radius: 4px;
     border-left: 4px solid;
+}
+
+.pit-message-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 4px;
+    font-size: 18px;
+    line-height: 1;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pit-message-close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.pit-message-close:focus {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
 }
 
 .pit-success {

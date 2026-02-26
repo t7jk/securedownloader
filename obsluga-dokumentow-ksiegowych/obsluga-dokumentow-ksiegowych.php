@@ -19,6 +19,10 @@ define( 'PIT_UPLOAD_CHUNK_SIZE', 5 ); // Maks. plików w jednym żądaniu (omija
 define( 'PIT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PIT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
+if ( is_file( PIT_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
+	require_once PIT_PLUGIN_DIR . 'vendor/autoload.php';
+}
+
 // Dołączenie plików klas
 require_once PIT_PLUGIN_DIR . 'includes/class-database.php';
 require_once PIT_PLUGIN_DIR . 'includes/class-admin.php';
@@ -96,11 +100,47 @@ function pit_get_default_filename_filters(): array {
 	];
 }
 
+/** Nazwa podkatalogu w wp-content/uploads na pliki wtyczki. */
+define( 'PIT_UPLOAD_SUBDIR', 'pit-documents' );
+
 /**
- * Zwraca ścieżkę do katalogu uploads wtyczki.
+ * Zwraca ścieżkę do katalogu uploads wtyczki (wp-content/uploads/pit-documents/).
+ * Katalog w wp-content/uploads ma zwykle poprawne uprawnienia do zapisu przez serwer WWW.
  */
 function pit_get_upload_dir(): string {
-    return PIT_PLUGIN_DIR . 'uploads/';
+	$upload = wp_upload_dir();
+	if ( ! empty( $upload['error'] ) ) {
+		return trailingslashit( WP_CONTENT_DIR ) . 'uploads/' . PIT_UPLOAD_SUBDIR . '/';
+	}
+	return trailingslashit( $upload['basedir'] ) . PIT_UPLOAD_SUBDIR . '/';
+}
+
+/**
+ * Zwraca URL katalogu uploads wtyczki (do zapisu w bazie; pobieranie odbywa się przez handler PHP).
+ */
+function pit_get_upload_url(): string {
+	$upload = wp_upload_dir();
+	if ( ! empty( $upload['error'] ) ) {
+		return content_url( 'uploads/' . PIT_UPLOAD_SUBDIR . '/' );
+	}
+	return trailingslashit( $upload['baseurl'] ) . PIT_UPLOAD_SUBDIR . '/';
+}
+
+/**
+ * Sprawdza, czy jest dostępna ekstrakcja tekstu z PDF (pdftotext lub biblioteka PHP Smalot\PdfParser).
+ * Wymagane do rozpoznawania PESEL z treści PDF.
+ *
+ * @return bool True, jeśli pdftotext działa lub klasa Parser jest załadowana.
+ */
+function pit_pdftotext_available(): bool {
+	if ( class_exists( 'Smalot\PdfParser\Parser', false ) ) {
+		return true;
+	}
+	if ( ! function_exists( 'shell_exec' ) || ini_get( 'safe_mode' ) ) {
+		return false;
+	}
+	$out = @shell_exec( 'pdftotext -v 2>&1' );
+	return is_string( $out ) && trim( $out ) !== '' && ( strpos( $out, 'pdftotext' ) !== false || preg_match( '/\d+\.\d+/', $out ) );
 }
 
 /**
@@ -300,10 +340,6 @@ register_deactivation_hook( __FILE__, 'pit_deactivate_plugin' );
 
 /**
  * Inicjalizacja klas wtyczki po załadowaniu wszystkich wtyczek WordPress.
- *
- * Na serwerze produkcyjnym: jeśli strona z shortcode [pit_accountant_panel] lub [pit_client_page]
- * jest pusta, sprawdź cache pełnostronicowy (wtyczka/CDN/serwer) – wyklucz ścieżki /ksiegowy
- * i /podatnik z cache lub wyczyść cache po zmianach.
  */
 function pit_init_plugin(): void {
 	PIT_Database::get_instance();
@@ -313,7 +349,28 @@ function pit_init_plugin(): void {
 
 	load_plugin_textdomain( 'obsluga-dokumentow-ksiegowych', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 
+	add_action( 'template_redirect', 'pit_send_nocache_headers_for_panel_pages', 1 );
+
 	pit_sync_files();
+}
+
+/**
+ * Wysyła nagłówki no-cache na stronach z panelem księgowego i podatnika.
+ * Ogranicza problem opóźnionego widoku zmian przy cache (pełnostronicowy, CDN, serwer).
+ */
+function pit_send_nocache_headers_for_panel_pages(): void {
+	if ( ! is_singular() ) {
+		return;
+	}
+	$post = get_queried_object();
+	if ( ! $post instanceof WP_Post ) {
+		return;
+	}
+	if ( has_shortcode( $post->post_content, 'pit_accountant_panel' ) || has_shortcode( $post->post_content, 'pit_client_page' ) ) {
+		if ( ! headers_sent() ) {
+			nocache_headers();
+		}
+	}
 }
 
 /**

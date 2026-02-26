@@ -133,7 +133,7 @@ class PIT_Admin {
         );
         add_settings_field(
             'pit_developer_mode',
-            __( 'Developer mode 01', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Developer mode', 'obsluga-dokumentow-ksiegowych' ),
             [ $this, 'render_field_checkbox' ],
             'obsluga-dokumentow-ksiegowych-settings',
             'pit_developer_section',
