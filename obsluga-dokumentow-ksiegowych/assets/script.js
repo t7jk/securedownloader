@@ -15,7 +15,29 @@
         initBrakPeselLink();
         initAccountantTabs();
         initChunkedUpload();
+        initMessageCloseButtons();
     });
+
+    /**
+     * Przyciski zamykania (×) na komunikatach .pit-message.
+     */
+    function initMessageCloseButtons() {
+        var $messages = $('.pit-message');
+        if ($messages.length === 0) {
+            return;
+        }
+        $messages.each(function() {
+            if ($(this).find('.pit-message-close').length > 0) {
+                return;
+            }
+            var closeLabel = (typeof pitManager !== 'undefined' && pitManager.closeMessage) ? pitManager.closeMessage : 'Zamknij';
+            var $btn = $('<button type="button" class="pit-message-close" aria-label="' + closeLabel.replace(/"/g, '&quot;') + '">×</button>');
+            $btn.on('click', function() {
+                $(this).closest('.pit-message').slideUp(200);
+            });
+            $(this).append($btn);
+        });
+    }
 
     /**
      * Walidacja formularza podatnika.

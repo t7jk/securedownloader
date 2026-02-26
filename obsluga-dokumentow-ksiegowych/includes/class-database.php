@@ -353,19 +353,39 @@ class PIT_Database {
 	public function get_all_files_sorted(): array {
 		global $wpdb;
 
-		return $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT f.*, 
-						MAX(d.downloaded_at) as last_download,
-						COUNT(d.id) as download_count
-				 FROM %i f 
-				 LEFT JOIN %i d ON f.id = d.file_id 
-				 GROUP BY f.id 
-				 ORDER BY f.full_name ASC",
-				self::$table_files,
-				self::$table_downloads
-			)
-		);
+		$tf = self::$table_files;
+		$td = self::$table_downloads;
+		$sql = "SELECT f.*,
+				MAX(d.downloaded_at) as last_download,
+				COUNT(d.id) as download_count
+			FROM `{$tf}` f
+			LEFT JOIN `{$td}` d ON f.id = d.file_id
+			GROUP BY f.id
+			ORDER BY f.full_name ASC";
+
+		$results = $wpdb->get_results( $sql );
+		return is_array( $results ) ? $results : [];
+	}
+
+	/**
+	 * Zwraca liczbę wierszy w tabeli plików (do diagnostyki).
+	 *
+	 * @return int
+	 */
+	public function get_files_count(): int {
+		global $wpdb;
+		$c = $wpdb->get_var( 'SELECT COUNT(*) FROM `' . self::$table_files . '`' );
+		return (int) $c;
+	}
+
+	/**
+	 * Zwraca ostatni błąd MySQL z $wpdb (do diagnostyki).
+	 *
+	 * @return string
+	 */
+	public function get_last_error(): string {
+		global $wpdb;
+		return (string) ( $wpdb->last_error ?? '' );
 	}
 
 	/**
@@ -537,9 +557,8 @@ class PIT_Database {
 			}
 		}
 
-		$upload_dir   = wp_upload_dir();
-		$pit_dir      = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
-		$pit_url_base = $upload_dir['baseurl'] . '/obsluga-dokumentow-ksiegowych/';
+		$pit_dir      = pit_get_upload_dir();
+		$pit_url_base = pit_get_upload_url();
 
 		if ( is_dir( $pit_dir ) ) {
 			$years = scandir( $pit_dir );
@@ -564,6 +583,9 @@ class PIT_Database {
 					}
 
 					$parsed = $this->parse_filename( $filename );
+					if ( ! $parsed ) {
+						$parsed = $this->parse_filename_flexible( $filename, (int) $year );
+					}
 					if ( ! $parsed ) {
 						continue;
 					}
@@ -626,6 +648,45 @@ class PIT_Database {
 			'full_name' => $full_name,
 			'pesel'     => $pesel,
 		];
+	}
+
+	/**
+	 * Parsuje zsanitizowane nazwy plików (z myślnikami), np. Ambrozik-Ewelina-PIT-11-29-rok-2025.pdf
+	 * lub Informacja-roczna-dla-Ambrozik-Ewelina.pdf. Używane przy „Wyszukaj wgrane pliki”.
+	 *
+	 * @param string $filename      Nazwa pliku.
+	 * @param int    $default_year  Rok (np. z nazwy katalogu) dla formatu „Informacja roczna”.
+	 * @return array|false Tablica full_name, tax_year, pesel lub false.
+	 */
+	private function parse_filename_flexible( string $filename, int $default_year ): array|false {
+		$name = pathinfo( $filename, PATHINFO_FILENAME );
+		if ( preg_match( '/^(.+)-PIT-11-\d+-rok-(\d{4})$/i', $name, $m ) ) {
+			$tax_year = (int) $m[2];
+			if ( $tax_year < 2000 || $tax_year > ( (int) date( 'Y' ) + 1 ) ) {
+				return false;
+			}
+			$full_name = trim( str_replace( '-', ' ', $m[1] ) );
+			if ( $full_name === '' ) {
+				return false;
+			}
+			return [
+				'full_name' => $full_name,
+				'tax_year'  => $tax_year,
+				'pesel'     => '',
+			];
+		}
+		if ( preg_match( '/^Informacja-roczna-dla-(.+)$/i', $name, $m ) ) {
+			$full_name = trim( str_replace( '-', ' ', $m[1] ) );
+			if ( $full_name === '' || $default_year < 2000 ) {
+				return false;
+			}
+			return [
+				'full_name' => $full_name,
+				'tax_year'  => $default_year,
+				'pesel'     => '',
+			];
+		}
+		return false;
 	}
 
 	/**

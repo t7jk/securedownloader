@@ -34,6 +34,10 @@ class PIT_Accountant {
         add_action( 'admin_post_nopriv_pit_save_import_patterns', [ $this, 'handle_save_import_patterns' ] );
         add_action( 'admin_post_pit_reset_import_patterns', [ $this, 'handle_reset_import_patterns' ] );
         add_action( 'admin_post_nopriv_pit_reset_import_patterns', [ $this, 'handle_reset_import_patterns' ] );
+        add_action( 'admin_post_pit_scan_uploaded_files', [ $this, 'handle_scan_uploaded_files' ] );
+        add_action( 'admin_post_nopriv_pit_scan_uploaded_files', [ $this, 'handle_scan_uploaded_files' ] );
+        add_action( 'admin_post_pit_delete_all_files', [ $this, 'handle_delete_all_files' ] );
+        add_action( 'admin_post_nopriv_pit_delete_all_files', [ $this, 'handle_delete_all_files' ] );
         add_action( 'admin_post_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
         add_action( 'admin_post_nopriv_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
         add_filter( 'template_include', [ $this, 'use_fullscreen_template' ], 99 );
@@ -545,6 +549,7 @@ class PIT_Accountant {
                 'confirmDelete'      => __( 'Czy na pewno usunąć ten dokument?', 'obsluga-dokumentow-ksiegowych' ),
                 'confirmBulkDelete'  => __( 'Czy na pewno usunąć zaznaczone dokumenty?', 'obsluga-dokumentow-ksiegowych' ),
                 'errorPesel'       => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
+                'closeMessage'     => __( 'Zamknij', 'obsluga-dokumentow-ksiegowych' ),
             ] );
         }
     }
@@ -602,6 +607,13 @@ class PIT_Accountant {
                 $count
             );
         }
+        if ( isset( $_GET['pit_all_deleted'] ) ) {
+            $count = (int) $_GET['pit_all_deleted'];
+            $message = sprintf(
+                _n( 'Usunięto %d dokument z serwera i bazy.', 'Usunięto %d dokumentów z serwera i bazy.', $count, 'obsluga-dokumentow-ksiegowych' ),
+                $count
+            );
+        }
         if ( isset( $_GET['pit_downloaded_deleted'] ) ) {
             $count = (int) $_GET['pit_downloaded_deleted'];
             $message = sprintf(
@@ -619,21 +631,71 @@ class PIT_Accountant {
         if ( isset( $_GET['pit_company_saved'] ) && $_GET['pit_company_saved'] === '1' ) {
             $message = __( 'Dane firmy zostały zapisane.', 'obsluga-dokumentow-ksiegowych' );
         }
+        if ( isset( $_GET['pit_scan_added'] ) || isset( $_GET['pit_scan_removed'] ) ) {
+            $added   = (int) ( $_GET['pit_scan_added'] ?? 0 );
+            $removed = (int) ( $_GET['pit_scan_removed'] ?? 0 );
+            $parts   = [];
+            if ( $added > 0 ) {
+                $parts[] = sprintf( _n( 'Dodano %d plik do bazy.', 'Dodano %d plików do bazy.', $added, 'obsluga-dokumentow-ksiegowych' ), $added );
+            }
+            if ( $removed > 0 ) {
+                $parts[] = sprintf( _n( 'Usunięto %d rekord (brak pliku na dysku).', 'Usunięto %d rekordów (brak pliku na dysku).', $removed, 'obsluga-dokumentow-ksiegowych' ), $removed );
+            }
+            $message = implode( ' ', $parts );
+            if ( $message === '' ) {
+                $message = __( 'Skanowanie zakończone. Nie znaleziono nowych plików PDF na dysku.', 'obsluga-dokumentow-ksiegowych' );
+            }
+        }
         $db = PIT_Database::get_instance();
         set_time_limit( 90 );
         $this->maybe_pack_zip_for_same_person_year( $db );
         $this->fill_missing_pesel_after_upload( $db );
         $files = $db->get_all_files_sorted();
 
+        $files_count_diagnostic   = null;
+        $files_select_error       = '';
+        $show_upload_empty_notice = empty( $files ) && isset( $_GET['pit_uploaded'] ) && (int) $_GET['pit_uploaded'] > 0;
+        if ( $show_upload_empty_notice ) {
+            $files_select_error = $db->get_last_error();
+            if ( (int) get_option( 'pit_developer_mode', 0 ) === 1 ) {
+                $files_count_diagnostic = $db->get_files_count();
+            }
+        }
+
         ob_start();
 
         ?>
         <div class="pit-accountant-panel">
-            <h2><?php esc_html_e( 'Panel Księgowego', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
+            <h2><?php esc_html_e( 'Panel księgowego 3', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
 
             <?php if ( $message ) : ?>
                 <div class="pit-message <?php echo esc_attr( $message_class ); ?>">
                     <?php echo esc_html( $message ); ?>
+                </div>
+            <?php endif; ?>
+            <?php if ( isset( $_GET['pit_uploaded'] ) && (int) $_GET['pit_uploaded'] > 0 ) : ?>
+                <div class="pit-message pit-info">
+                    <p><?php esc_html_e( 'Po wgraniu dokumentów naciśnij Ctrl+F5 (twarde odświeżenie), aby zobaczyć zaktualizowaną listę – cache może pokazywać starą wersję strony.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                </div>
+            <?php endif; ?>
+            <?php if ( $show_upload_empty_notice ) : ?>
+                <div class="pit-message pit-warning">
+                    <p><strong><?php esc_html_e( 'Lista dokumentów jest pusta mimo wgrania plików.', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
+                    <p><strong><?php esc_html_e( 'Wymagane: naciśnij Ctrl+F5 (lub Cmd+Shift+R na Macu), aby wymusić odświeżenie strony i pominąć cache. Zwykłe F5 może pokazywać starą, zapisaną w cache wersję.', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
+                    <?php if ( $files_select_error !== '' ) : ?>
+                        <p><?php esc_html_e( 'Błąd zapytania SQL:', 'obsluga-dokumentow-ksiegowych' ); ?> <code><?php echo esc_html( $files_select_error ); ?></code></p>
+                    <?php endif; ?>
+                    <?php if ( $files_count_diagnostic !== null ) : ?>
+                        <p><?php echo esc_html( sprintf( __( 'Liczba wierszy w tabeli plików: %d.', 'obsluga-dokumentow-ksiegowych' ), $files_count_diagnostic ) ); ?>
+                        <?php if ( $files_count_diagnostic > 0 ) : ?>
+                            <?php esc_html_e( 'Dane są w bazie – to niemal na pewno cache. Wciśnij Ctrl+F5 (twarde odświeżenie) lub wyczyść cache wtyczki/CDN.', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        <?php else : ?>
+                            <?php esc_html_e( 'Tabela pusta – wstawianie mogło trafić do innej bazy (np. inny serwer w klastrze). Sprawdź konfigurację serwera.', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        <?php endif; ?>
+                        </p>
+                    <?php elseif ( $files_select_error === '' ) : ?>
+                        <p><?php esc_html_e( 'Włącz Tryb deweloperski w Ustawieniach wtyczki (Narzędzia → Obsługa dokumentów księgowych), aby zobaczyć liczbę wierszy w tabeli i ustalić przyczynę.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
             <?php if ( ! empty( $upload_failed_list ) ) : ?>
@@ -651,7 +713,7 @@ class PIT_Accountant {
             if ( is_array( $pesel_diagnostics ) && ! empty( $pesel_diagnostics ) ) :
                 delete_transient( 'pit_upload_pesel_diagnostics_' . get_current_user_id() );
                 ?>
-                <div class="pit-message pit-warning">
+                <div class="pit-message pit-warning pit-pesel-diagnostics">
                     <p><strong><?php esc_html_e( 'Tryb deweloperski: nie rozpoznano PESEL dla części osób', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
                     <p><?php esc_html_e( 'Poniższe informacje pomagają zdiagnozować problem na produkcji (gdy u Ciebie działa, a na serwerze klienta nie).', 'obsluga-dokumentow-ksiegowych' ); ?></p>
                     <?php foreach ( $pesel_diagnostics as $diag ) : ?>
@@ -662,6 +724,12 @@ class PIT_Accountant {
                             <?php endforeach; ?>
                         </ul>
                     <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+            <?php if ( ! pit_pdftotext_available() ) : ?>
+                <div class="pit-message pit-warning">
+                    <p><?php esc_html_e( 'Rozpoznawanie PESEL z PDF wymaga narzędzia pdftotext (pakiet poppler-utils). Na tym serwerze nie jest ono dostępne – zainstaluj je lub uzupełniaj PESEL ręcznie.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                    <p><?php esc_html_e( 'Alternatywa: wgraj wtyczkę wraz z folderem vendor/ (po uruchomieniu composer install w katalogu wtyczki) – wtedy PESEL będzie rozpoznawany z PDF bez pdftotext.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
                 </div>
             <?php endif; ?>
 
@@ -784,6 +852,13 @@ class PIT_Accountant {
             </form>
 
                 <div class="pit-form-row pit-delete-downloaded-row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--pit-border, #ddd); display: flex; flex-wrap: wrap; align-items: center; gap: 16px; align-content: center;">
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-delete-all-form" style="display: inline-block;" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno usunąć wszystkie dokumenty z serwera i bazy? Tej operacji nie można cofnąć.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
+                        <?php wp_nonce_field( 'pit_delete_all_files', 'pit_delete_all_nonce' ); ?>
+                        <input type="hidden" name="action" value="pit_delete_all_files">
+                        <button type="submit" class="button pit-btn-delete-all">
+                            <?php esc_html_e( 'Usuń wszystkie', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        </button>
+                    </form>
                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-delete-downloaded-form" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno usunąć z serwera wszystkie pliki, które zostały już pobrane? Tej operacji nie można cofnąć.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
                         <?php wp_nonce_field( 'pit_delete_downloaded_files', 'pit_delete_downloaded_nonce' ); ?>
                         <input type="hidden" name="action" value="pit_delete_downloaded_files">
@@ -882,6 +957,19 @@ class PIT_Accountant {
                         </button>
                     </div>
                 </form>
+                <div class="pit-form-row pit-scan-uploaded-row" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--pit-border, #ddd);">
+                    <p style="margin: 0 0 8px 0; font-weight: 600;"><?php esc_html_e( 'Wyszukaj wgrane pliki', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-scan-uploaded-form" style="display: inline-block;">
+                        <?php wp_nonce_field( 'pit_scan_uploaded_files', 'pit_scan_nonce' ); ?>
+                        <input type="hidden" name="action" value="pit_scan_uploaded_files">
+                        <button type="submit" class="button button-secondary" id="pit-scan-uploaded-btn">
+                            <?php esc_html_e( 'Wyszukaj wgrane pliki', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        </button>
+                    </form>
+                    <p class="description" style="margin: 8px 0 0 0; display: block;">
+                        <?php esc_html_e( 'Skanuje katalog uploadów na serwerze, dodaje do listy dokumentów znalezione pliki PDF (rozpoznanie jak przy wgrywaniu) i uzupełnia PESEL z treści PDF.', 'obsluga-dokumentow-ksiegowych' ); ?>
+                    </p>
+                </div>
             <script>
             (function() {
                 var form = document.getElementById('pit-upload-form');
@@ -949,7 +1037,17 @@ class PIT_Accountant {
                         fd.append('pit_upload_total_chunks', String(total));
                         fd.append('pit_pdfs[]', files[current]);
                         fetch(uploadUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                            .then(function(r) { return r.json(); })
+                            .then(function(r) { return r.text(); })
+                            .then(function(text) {
+                                var data;
+                                try {
+                                    data = JSON.parse(text);
+                                } catch (e) {
+                                    var preview = text.length > 300 ? text.substring(0, 300) + '...' : text;
+                                    throw new Error('Odpowiedź serwera nie jest JSON. Początek: ' + preview.replace(/\s+/g, ' ').trim());
+                                }
+                                return data;
+                            })
                             .then(function(data) {
                                 if (data && data.success && data.data) {
                                     if (data.data.debug_log && data.data.debug_log.length) setDebugLog(data.data.debug_log);
@@ -1110,23 +1208,46 @@ class PIT_Accountant {
      */
     public function handle_upload(): void {
         pit_debug_log( 'handle_upload: start' );
+        $is_chunked = $this->is_chunked_upload_request();
+        if ( $is_chunked ) {
+            while ( ob_get_level() ) {
+                ob_end_clean();
+            }
+            ob_start();
+        }
+
         if ( ! $this->check_access() ) {
+            if ( $is_chunked ) {
+                ob_end_clean();
+                wp_send_json_error( [ 'message' => __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) ] );
+            }
             wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( ! wp_verify_nonce( $_POST['pit_nonce'] ?? '', 'pit_upload_nonce' ) ) {
+            if ( $is_chunked ) {
+                ob_end_clean();
+                wp_send_json_error( [ 'message' => __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) ] );
+            }
             wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         if ( empty( $_FILES['pit_pdfs'] ) || empty( $_FILES['pit_pdfs']['name'] ) ) {
+            if ( $is_chunked ) {
+                ob_end_clean();
+                wp_send_json_error( [ 'message' => __( 'Nie wybrano dokumentów.', 'obsluga-dokumentow-ksiegowych' ) ] );
+            }
             wp_die( __( 'Nie wybrano dokumentów.', 'obsluga-dokumentow-ksiegowych' ) );
         }
 
         set_time_limit( 120 );
         pit_debug_log( 'handle_upload: after set_time_limit' );
 
-        $is_chunked = $this->is_chunked_upload_request();
-        $chunk_key  = 'pit_upload_chunk_state_' . get_current_user_id();
+        if ( function_exists( 'pit_create_upload_directory' ) ) {
+            pit_create_upload_directory();
+        }
+
+        $chunk_key = 'pit_upload_chunk_state_' . get_current_user_id();
 
         if ( $is_chunked ) {
             $state = get_transient( $chunk_key );
@@ -1239,26 +1360,50 @@ class PIT_Accountant {
                 $chunk_log[] = '  → full_name=' . ( $parsed['full_name'] ?? '' ) . ', tax_year=' . ( $parsed['tax_year'] ?? '' ) . ', pesel=' . ( $parsed['pesel'] ?? '' );
             }
 
-            $upload_dir = wp_upload_dir();
-            $target_dir = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/' . $parsed['tax_year'] . '/';
+            $target_dir = pit_get_upload_dir() . $parsed['tax_year'] . '/';
 
             if ( ! is_dir( $target_dir ) ) {
                 wp_mkdir_p( $target_dir );
+                if ( ! is_dir( $target_dir ) && function_exists( 'pit_create_upload_directory' ) ) {
+                    pit_create_upload_directory();
+                    wp_mkdir_p( $target_dir );
+                }
             }
 
             $safe_name   = sanitize_file_name( $name );
             $target_path = $target_dir . $safe_name;
 
+            if ( $dev_log ) {
+                $chunk_log[] = '  → ' . __( 'próba zapisu PDF, pełna ścieżka:', 'obsluga-dokumentow-ksiegowych' ) . ' ' . $target_path;
+            }
+
             if ( ! move_uploaded_file( $tmp_name, $target_path ) ) {
                 $errors++;
+                $reason = __( 'Nie udało się zapisać pliku na serwerze.', 'obsluga-dokumentow-ksiegowych' );
+                if ( ! is_dir( $target_dir ) ) {
+                    $reason .= ' ' . __( 'Katalog docelowy nie istnieje (np. brak uprawnień do utworzenia).', 'obsluga-dokumentow-ksiegowych' );
+                } elseif ( ! is_writable( $target_dir ) ) {
+                    $reason .= ' ' . __( 'Brak uprawnień do zapisu w katalogu – ustaw np. chmod 755 lub 775 dla katalogu uploads wtyczki.', 'obsluga-dokumentow-ksiegowych' );
+                } else {
+                    $reason .= ' ' . __( 'Sprawdź uprawnienia do katalogu uploads wtyczki (np. chmod 755) i czy serwer WWW ma prawo zapisu.', 'obsluga-dokumentow-ksiegowych' );
+                }
                 $failed[] = [
                     'name'   => $name,
-                    'reason' => __( 'Nie udało się zapisać pliku na serwerze.', 'obsluga-dokumentow-ksiegowych' ),
+                    'reason' => $reason,
                 ];
                 if ( $dev_log ) {
-                    $chunk_log[] = '  → ' . __( 'błąd: Nie udało się zapisać pliku na serwerze', 'obsluga-dokumentow-ksiegowych' );
+                    $chunk_log[] = '  → ' . __( 'błąd: Nie udało się zapisać pliku na serwerze', 'obsluga-dokumentow-ksiegowych' ) . ' (' . $target_path . ')';
+                    if ( ! is_dir( $target_dir ) ) {
+                        $chunk_log[] = '  → katalog nie istnieje: ' . $target_dir;
+                    } elseif ( ! is_writable( $target_dir ) ) {
+                        $chunk_log[] = '  → katalog nie ma uprawnień do zapisu: ' . $target_dir;
+                    }
                 }
                 continue;
+            }
+
+            if ( $dev_log ) {
+                $chunk_log[] = '  → ' . __( 'zapis PDF na dysk: OK', 'obsluga-dokumentow-ksiegowych' ) . ', ' . $target_path;
             }
 
             $year_from_pdf = null;
@@ -1292,7 +1437,7 @@ class PIT_Accountant {
                 $chunk_log[] = '  → rok z PDF: ' . $year_from_pdf;
             }
 
-            $file_url = $upload_dir['baseurl'] . '/obsluga-dokumentow-ksiegowych/' . $parsed['tax_year'] . '/' . $safe_name;
+            $file_url = pit_get_upload_url() . $parsed['tax_year'] . '/' . $safe_name;
 
             $result = $db->insert_file( [
                 'full_name' => $parsed['full_name'],
@@ -1344,12 +1489,19 @@ class PIT_Accountant {
                     pit_debug_log( 'handle_upload: before fill_missing_pesel_after_upload (chunked last)' );
                     $this->fill_missing_pesel_after_upload( $db );
                     $this->collect_pesel_diagnostics_after_upload( $db );
+                    if ( $dev_log ) {
+                        $state['debug_log'] = array_merge(
+                            $state['debug_log'],
+                            $this->get_pesel_debug_log_lines( $db )
+                        );
+                    }
                 }
                 delete_transient( $chunk_key );
                 $redirect = add_query_arg( [
                     'pit_uploaded' => $state['uploaded'],
                     'pit_errors'   => $state['errors'],
                     'pit_skipped'  => $state['skipped'],
+                    'pit_nocache'  => time(),
                 ], wp_get_referer() ?: home_url() );
                 if ( ! empty( $state['failed'] ) ) {
                     set_transient( 'pit_upload_failed_files_' . get_current_user_id(), $state['failed'], 60 );
@@ -1359,11 +1511,17 @@ class PIT_Accountant {
                 if ( $dev_log && ! empty( $state['debug_log'] ) ) {
                     $response['debug_log'] = $state['debug_log'];
                 }
+                if ( ob_get_level() ) {
+                    ob_end_clean();
+                }
                 wp_send_json_success( $response );
             }
             $response = [ 'done' => false ];
             if ( $dev_log && ! empty( $state['debug_log'] ) ) {
                 $response['debug_log'] = $state['debug_log'];
+            }
+            if ( ob_get_level() ) {
+                ob_end_clean();
             }
             wp_send_json_success( $response );
         }
@@ -1379,6 +1537,7 @@ class PIT_Accountant {
             'pit_uploaded' => $state['uploaded'],
             'pit_errors'   => $state['errors'],
             'pit_skipped'  => $state['skipped'],
+            'pit_nocache'  => time(),
         ], wp_get_referer() ?: home_url() );
 
         if ( ! empty( $state['failed'] ) ) {
@@ -1416,9 +1575,8 @@ class PIT_Accountant {
             return;
         }
 
-        $upload_dir = wp_upload_dir();
-        $base_dir   = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
-        $base_url   = $upload_dir['baseurl'] . '/obsluga-dokumentow-ksiegowych/';
+        $base_dir = pit_get_upload_dir();
+        $base_url = pit_get_upload_url();
 
         foreach ( $rows as $row ) {
             $tax_year  = (int) $row['tax_year'];
@@ -1639,7 +1797,7 @@ class PIT_Accountant {
 
         $text = $this->extract_text_from_pdf( $file_path );
         if ( $text === '' ) {
-            $reasons[] = __( 'Nie udało się wyciągnąć tekstu z PDF. Na serwerze może brakować narzędzia pdftotext (np. pakiet poppler-utils). Sprawdź: pdftotext -v w terminalu.', 'obsluga-dokumentow-ksiegowych' );
+            $reasons[] = __( 'Nie udało się wyciągnąć tekstu z PDF. Upewnij się, że folder vendor wtyczki jest wgrany na serwer (biblioteka PHP do odczytu PDF). Alternatywnie na serwerze może być dostępne narzędzie pdftotext (poppler-utils) – na hostingu często jest wyłączone wywołanie shell (shell_exec).', 'obsluga-dokumentow-ksiegowych' );
             return $reasons;
         }
 
@@ -1687,6 +1845,34 @@ class PIT_Accountant {
         }
 
         return $reasons;
+    }
+
+    /**
+     * Zwraca linie logu debugowego dotyczące rozpoznawania PESEL (osoby z pustym PESEL i przyczyny).
+     *
+     * @param PIT_Database $db Instancja bazy.
+     * @return string[] Linie do dopisania do debug_log.
+     */
+    private function get_pesel_debug_log_lines( PIT_Database $db ): array {
+        $persons = $db->get_person_ids_with_empty_pesel();
+        if ( empty( $persons ) ) {
+            return [];
+        }
+        $lines   = [];
+        $lines[] = '';
+        $lines[] = '--- ' . __( 'Rozpoznawanie PESEL (osoby bez PESEL)', 'obsluga-dokumentow-ksiegowych' ) . ' ---';
+        foreach ( $persons as $full_name ) {
+            $reasons = $this->diagnose_pesel_failure( $full_name, $db );
+            $lines[] = __( 'Osoba:', 'obsluga-dokumentow-ksiegowych' ) . ' ' . $full_name;
+            if ( empty( $reasons ) ) {
+                $lines[] = '  → ' . __( 'Brak szczegółowych przyczyn (PESEL mógł zostać uzupełniony z bazy).', 'obsluga-dokumentow-ksiegowych' );
+            } else {
+                foreach ( $reasons as $r ) {
+                    $lines[] = '  → ' . $r;
+                }
+            }
+        }
+        return $lines;
     }
 
     /**
@@ -1840,7 +2026,8 @@ class PIT_Accountant {
     }
 
     /**
-     * Wyciąga tekst z pliku PDF (jeśli dostępne narzędzie).
+     * Wyciąga tekst z pliku PDF (najpierw biblioteka PHP Smalot\PdfParser, potem pdftotext).
+     * Kolejność: PHP nie wymaga shell_exec, więc działa na hostingu bez pdftotext lub z wyłączonym shell_exec.
      *
      * @param string $file_path Ścieżka do PDF.
      * @return string Tekst lub pusty.
@@ -1849,11 +2036,27 @@ class PIT_Accountant {
         if ( ! file_exists( $file_path ) ) {
             return '';
         }
+
+        if ( class_exists( 'Smalot\PdfParser\Parser' ) ) {
+            try {
+                $parser = new \Smalot\PdfParser\Parser();
+                $pdf    = $parser->parseFile( $file_path );
+                $text   = $pdf->getText();
+                if ( is_string( $text ) && trim( $text ) !== '' ) {
+                    return $text;
+                }
+            } catch ( \Exception $e ) {
+                // Fallback do pdftotext poniżej.
+            }
+        }
+
         $path = escapeshellarg( $file_path );
-        $cmd = "pdftotext -layout {$path} - 2>/dev/null";
-        if ( function_exists( 'shell_exec' ) && ! ini_get( 'safe_mode' ) ) {
+        $cmd  = "pdftotext -layout {$path} - 2>/dev/null";
+        if ( function_exists( 'shell_exec' ) ) {
             $out = @shell_exec( $cmd );
-            return is_string( $out ) ? $out : '';
+            if ( is_string( $out ) && trim( $out ) !== '' ) {
+                return $out;
+            }
         }
         return '';
     }
@@ -1920,6 +2123,62 @@ class PIT_Accountant {
 
         pit_debug_log( 'handle_bulk_delete: after loop, deleted=' . $count . ', before redirect' );
         $redirect = add_query_arg( 'pit_bulk_deleted', $count, wp_get_referer() ?: home_url() );
+        pit_redirect_safe( $redirect );
+    }
+
+    /**
+     * Skanuje katalog uploadów, dodaje brakujące pliki PDF do bazy i uzupełnia PESEL (jak przy wgrywaniu).
+     */
+    public function handle_scan_uploaded_files(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_scan_nonce'] ?? '', 'pit_scan_uploaded_files' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        set_time_limit( 90 );
+        $db     = PIT_Database::get_instance();
+        $result = $db->sync_files();
+
+        if ( $result['added'] > 0 ) {
+            $this->fill_missing_pesel_after_upload( $db );
+            $this->collect_pesel_diagnostics_after_upload( $db );
+        }
+
+        $redirect = add_query_arg( [
+            'pit_scan_added'   => $result['added'],
+            'pit_scan_removed' => $result['removed'],
+            'pit_nocache'      => time(),
+        ], wp_get_referer() ?: home_url() );
+        pit_redirect_safe( $redirect );
+    }
+
+    /**
+     * Usuwa wszystkie dokumenty z bazy i z dysku serwera.
+     */
+    public function handle_delete_all_files(): void {
+        if ( ! $this->check_access() ) {
+            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        if ( ! wp_verify_nonce( $_POST['pit_delete_all_nonce'] ?? '', 'pit_delete_all_files' ) ) {
+            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+        }
+
+        $db    = PIT_Database::get_instance();
+        $files = $db->get_all_files_sorted();
+        $count = 0;
+
+        foreach ( $files as $f ) {
+            $id = (int) ( $f->id ?? 0 );
+            if ( $id > 0 && $db->delete_file( $id ) ) {
+                $count++;
+            }
+        }
+
+        $redirect = add_query_arg( 'pit_all_deleted', $count, wp_get_referer() ?: home_url() );
         pit_redirect_safe( $redirect );
     }
 
