@@ -21,6 +21,7 @@ class PIT_Client {
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'template_redirect',  [ $this, 'handle_download' ] );
         add_action( 'template_redirect',  [ $this, 'handle_single_file_download' ], 5 );
+        add_filter( 'template_include',   [ $this, 'use_fullscreen_template' ], 99 );
     }
 
     /**
@@ -38,6 +39,28 @@ class PIT_Client {
      */
     public function register_shortcode(): void {
         add_shortcode( 'pit_client_page', [ $this, 'render_shortcode' ] );
+    }
+
+    /**
+     * Dla strony podatnika zwraca szablon pełnoekranowy (bez motywu).
+     *
+     * @param string $template Ścieżka do aktualnego szablonu.
+     * @return string Ścieżka do szablonu.
+     */
+    public function use_fullscreen_template( string $template ): string {
+        $client_url = get_option( 'pit_client_page_url', '' );
+        if ( $client_url === '' ) {
+            return $template;
+        }
+        $client_page_id = url_to_postid( $client_url );
+        if ( $client_page_id <= 0 || ! is_singular() ) {
+            return $template;
+        }
+        if ( (int) get_queried_object_id() !== (int) $client_page_id ) {
+            return $template;
+        }
+        $fullscreen = PIT_PLUGIN_DIR . 'templates/fullwidth-client.php';
+        return is_readable( $fullscreen ) ? $fullscreen : $template;
     }
 
     /**
@@ -63,12 +86,9 @@ class PIT_Client {
             );
 
             wp_localize_script( 'obsluga-dokumentow-ksiegowych-script', 'pitManager', [
-                'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
-                'nonce'        => wp_create_nonce( 'pit_manager_nonce' ),
-                'errorPesel'   => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
-                'errorName'    => __( 'Imię i nazwisko są wymagane.', 'obsluga-dokumentow-ksiegowych' ),
-                'errorFirstName' => __( 'Imię jest wymagane.', 'obsluga-dokumentow-ksiegowych' ),
-                'errorLastName'  => __( 'Nazwisko jest wymagane.', 'obsluga-dokumentow-ksiegowych' ),
+                'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+                'nonce'      => wp_create_nonce( 'pit_manager_nonce' ),
+                'errorPesel' => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
             ] );
         }
     }
@@ -83,8 +103,7 @@ class PIT_Client {
         $company_address = get_option( 'pit_company_address', '' );
         $company_nip     = get_option( 'pit_company_nip', '' );
 
-        $db    = PIT_Database::get_instance();
-        $years = $db->get_available_years();
+        $db = PIT_Database::get_instance();
 
         $error   = '';
         $success = '';
@@ -110,6 +129,10 @@ class PIT_Client {
             // Ekran „Dokumenty do pobrania” – bez formularza.
             ?>
         <div class="pit-client-page pit-client-files-screen">
+            <style type="text/css">
+                .pit-client-files-screen a.pit-download-one-btn { background: #c00 !important; background-color: #c00 !important; color: #fff !important; border: 1px solid #a00 !important; text-decoration: none !important; }
+                .pit-client-files-screen a.pit-download-one-btn:hover { background: #a00 !important; background-color: #a00 !important; color: #fff !important; }
+            </style>
             <h2><?php esc_html_e( 'Dokumenty do pobrania', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
 
             <div class="pit-files-list">
@@ -147,8 +170,6 @@ class PIT_Client {
 
         ?>
         <div class="pit-client-page">
-            <h2><?php esc_html_e( 'Pobierz dokumenty księgowe', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
-
             <?php if ( $company_name || $company_address || $company_nip ) : ?>
                 <div class="pit-company-info">
                     <?php if ( $company_name ) : ?>
@@ -173,90 +194,28 @@ class PIT_Client {
                 <?php wp_nonce_field( 'pit_download_nonce', 'pit_nonce' ); ?>
 
                 <div class="pit-form-row">
-                    <label for="pit_tax_year"><?php esc_html_e( 'Rok podatkowy', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
-                    <select name="tax_year" id="pit_tax_year" required>
-                        <?php if ( empty( $years ) ) : ?>
-                            <option value=""><?php esc_html_e( 'Brak dostępnych lat', 'obsluga-dokumentow-ksiegowych' ); ?></option>
-                        <?php else : ?>
-                            <?php foreach ( $years as $y ) : ?>
-                                <option value="<?php echo esc_attr( $y ); ?>">
-                                    <?php echo esc_html( $y ); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </select>
-                </div>
-
-                <div class="pit-form-row">
-                    <label for="pit_pesel"><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
                     <input type="text" 
                            name="pesel" 
                            id="pit_pesel" 
                            pattern="[0-9]{11}" 
                            maxlength="11" 
-                           placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-dokumentow-ksiegowych' ); ?>"
+                           placeholder="<?php esc_attr_e( 'Wprowadź kod dostępu.', 'obsluga-dokumentow-ksiegowych' ); ?>"
                            required>
                 </div>
-
-                <div class="pit-form-row">
-                    <label for="pit_last_name"><?php esc_html_e( 'Nazwisko', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
-                    <input type="text" 
-                           name="last_name" 
-                           id="pit_last_name" 
-                           class="pit-uppercase"
-                           placeholder="<?php esc_attr_e( 'Np. KOWALSKI', 'obsluga-dokumentow-ksiegowych' ); ?>"
-                           required
-                           autocomplete="family-name">
-                </div>
-                <div class="pit-form-row">
-                    <label for="pit_first_name"><?php esc_html_e( 'Imię', 'obsluga-dokumentow-ksiegowych' ); ?> *</label>
-                    <input type="text" 
-                           name="first_name" 
-                           id="pit_first_name" 
-                           class="pit-uppercase"
-                           placeholder="<?php esc_attr_e( 'Np. JAN', 'obsluga-dokumentow-ksiegowych' ); ?>"
-                           required
-                           autocomplete="given-name">
-                </div>
-
+                
                 <div class="pit-form-row">
                     <button type="submit" class="button button-primary pit-submit-btn">
-                        <?php esc_html_e( 'Pobierz dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        <?php esc_html_e( 'OK', 'obsluga-dokumentow-ksiegowych' ); ?>
                     </button>
                 </div>
             </form>
 
-            <p class="pit-info">
-                <?php esc_html_e( 'Wprowadź swoje dane osobowe, aby pobrać formularz PIT-11. Dane muszą być zgodne z zapisami w dokumentacji księgowej.', 'obsluga-dokumentow-ksiegowych' ); ?>
-            </p>
         </div>
         <?php
 
         return ob_get_clean();
     }
 
-    /**
-     * Sanityzuje i wymusza wielkie litery w polu imienia/nazwiska.
-     *
-     * @param string $value Wartość z formularza.
-     * @return string Trim, sanityzacja, wielkie litery (UTF-8).
-     */
-    private function sanitize_uppercase_name( string $value ): string {
-        $s = sanitize_text_field( $value );
-        $s = preg_replace( '/^\s+|\s+$/u', '', $s );
-        if ( $s === '' ) {
-            return '';
-        }
-        return function_exists( 'mb_strtoupper' ) ? mb_strtoupper( $s, 'UTF-8' ) : strtoupper( $s );
-    }
-
-    /**
-     * Sprawdza, czy imię i nazwisko z bazy zgadza się z wpisanym (wymagana pełna zgodność).
-     *
-     * @param string $db_name   full_name z rekordu pliku.
-     * @param string $user_name Wpisane imię i nazwisko (po normalizacji).
-     * @return bool True jeśli identyczne (słowa w dowolnej kolejności).
-     */
     /**
      * Przekierowuje na stronę podatnika z komunikatem błędu.
      */
@@ -271,21 +230,6 @@ class PIT_Client {
         wp_redirect( add_query_arg( 'pit_error', '1', $url ) );
     }
 
-    private function names_match_for_download( string $db_name, string $user_name ): bool {
-        $db_lower   = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $db_name ), 'UTF-8' ) : strtolower( trim( $db_name ) );
-        $user_lower = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $user_name ), 'UTF-8' ) : strtolower( trim( $user_name ) );
-        $db_parts   = array_values( array_filter( preg_split( '/[\s_]+/', $db_lower ) ) );
-        $user_parts = array_values( array_filter( preg_split( '/[\s_]+/', $user_lower ) ) );
-
-        $db_parts   = array_map( 'pit_normalize_name_for_compare', $db_parts );
-        $user_parts = array_map( 'pit_normalize_name_for_compare', $user_parts );
-
-        sort( $db_parts );
-        sort( $user_parts );
-
-        return $db_parts === $user_parts;
-    }
-
     public function handle_download(): void {
         if ( ! isset( $_POST['pit_nonce'] ) ) {
             return;
@@ -295,31 +239,10 @@ class PIT_Client {
             return;
         }
 
-        $pesel      = sanitize_text_field( $_POST['pesel'] ?? '' );
-        $first_name = $this->sanitize_uppercase_name( $_POST['first_name'] ?? '' );
-        $last_name  = $this->sanitize_uppercase_name( $_POST['last_name'] ?? '' );
-        $tax_year   = (int) ( $_POST['tax_year'] ?? 0 );
-
-        $full_name = pit_normalize_full_name( $last_name . ' ' . $first_name );
-
-        $errors = [];
+        $pesel    = sanitize_text_field( $_POST['pesel'] ?? '' );
+        $tax_year = (int) date( 'Y' ) - 1;
 
         if ( ! preg_match( '/^\d{11}$/', $pesel ) ) {
-            $errors[] = 'pesel';
-        }
-
-        if ( $first_name === '' ) {
-            $errors[] = 'first_name';
-        }
-        if ( $last_name === '' ) {
-            $errors[] = 'last_name';
-        }
-
-        if ( $tax_year < 2000 || $tax_year > date( 'Y' ) + 1 ) {
-            $errors[] = 'tax_year';
-        }
-
-        if ( ! empty( $errors ) ) {
             wp_redirect( add_query_arg( 'pit_error', '1', wp_get_referer() ) );
             exit;
         }
@@ -328,12 +251,6 @@ class PIT_Client {
         $files = $db->get_files_by_pesel( $pesel, $tax_year );
 
         if ( empty( $files ) ) {
-            wp_redirect( add_query_arg( 'pit_error', '1', wp_get_referer() ) );
-            exit;
-        }
-
-        $first = $files[0];
-        if ( ! $this->names_match_for_download( $first->full_name, $full_name ) ) {
             wp_redirect( add_query_arg( 'pit_error', '1', wp_get_referer() ) );
             exit;
         }

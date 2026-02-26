@@ -34,6 +34,58 @@ body .pit-accountant-panel h3 {
     color: var(--pit-accent);
 }
 
+/* Pełny ekran – strona księgowego: 90% szerokości, wyśrodkowany */
+body.pit-accountant-fullscreen .pit-fullscreen-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100% !important;
+    height: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+body.pit-accountant-fullscreen .pit-accountant-panel {
+    flex: 1;
+    width: 96% !important;
+    max-width: 96% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding: 30px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    box-sizing: border-box;
+}
+body.pit-accountant-fullscreen .pit-tab-panel.active {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* Pełny ekran – strona podatnika bez szablonu motywu, treść 80% szerokości, wyśrodkowana */
+body.pit-client-fullscreen .pit-fullscreen-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100% !important;
+    height: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+body.pit-client-fullscreen .pit-client-page {
+    width: 80% !important;
+    max-width: 80% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box;
+}
+
 /* Kontenery */
 .pit-client-page,
 .pit-accountant-panel {
@@ -117,6 +169,13 @@ body .pit-accountant-panel h3 {
 
 .pit-form-row {
     margin-bottom: 15px;
+}
+
+.pit-form-hint {
+    margin: 0 0 15px 0;
+    font-size: 0.95em;
+    color: var(--pit-text);
+    opacity: 0.85;
 }
 
 .pit-form-row label {
@@ -286,12 +345,27 @@ body .pit-accountant-panel h3 {
     word-break: break-all;
 }
 
-.pit-download-one-btn {
+.pit-download-one-btn,
+.pit-client-files-screen .pit-download-one-btn,
+.pit-client-page a.pit-download-one-btn {
     flex-shrink: 0;
     padding: 8px 16px;
     font-size: 13px;
-    text-decoration: none;
+    text-decoration: none !important;
     white-space: nowrap;
+    background: #c00 !important;
+    background-color: #c00 !important;
+    color: #fff !important;
+    border: 1px solid #a00 !important;
+    border-radius: 3px;
+}
+.pit-download-one-btn:hover,
+.pit-client-files-screen .pit-download-one-btn:hover,
+.pit-client-page a.pit-download-one-btn:hover {
+    background: #a00 !important;
+    background-color: #a00 !important;
+    color: #fff !important;
+    border-color: #800 !important;
 }
 
 /* Ekran „Dokumenty do pobrania” (osobny widok) */
@@ -411,6 +485,15 @@ body .pit-accountant-panel h3 {
     background: #f5f5f5;
 }
 
+/* Opakowanie tabeli wzorców – przewijanie w poziomie, gdy tabela nie mieści się w panelu */
+.pit-wzorce-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 10px 0;
+    border: 1px solid var(--pit-border);
+    border-radius: 4px;
+}
+
 /* Tabela wzorców – skaluje się w poziomie, tekst w polach mieści się lub zawija */
 #pit-wzorce-table {
     width: 100%;
@@ -455,7 +538,7 @@ body .pit-accountant-panel h3 {
 #pit-wzorce-table th:last-child,
 #pit-wzorce-table td:last-child {
     width: 8%;
-    min-width: 70px;
+    min-width: 90px;
 }
 
 #pit-wzorce-table input.regular-text,
@@ -477,35 +560,28 @@ body .pit-accountant-panel h3 {
     white-space: pre-wrap;
 }
 
-/* Dół zakładki Dokumenty: Usuń pobrane + Raport PDF */
-.pit-report-pdf-form-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.pit-report-year-block {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-}
-
-.pit-report-year-row {
-    display: flex;
+/* Dół zakładki Dokumenty: Usuń pobrane + Raport PDF (label, dropdown, przycisk w jednej linii) */
+.pit-report-pdf-form-inline,
+#pit-report-pdf-form {
+    display: inline-flex !important;
+    flex-wrap: nowrap !important;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
-.pit-report-year-block .pit-report-year-label {
+.pit-report-pdf-form-inline .pit-report-year-label,
+#pit-report-pdf-form .pit-report-year-label {
     font-size: 12px;
     color: var(--pit-text, #333);
-    white-space: nowrap;
+    white-space: nowrap !important;
+    flex-shrink: 0;
 }
 
 .pit-btn-generate-report {
-    white-space: nowrap;
-    min-width: 160px;
+    white-space: nowrap !important;
+    min-width: 180px;
+    flex-shrink: 0;
     box-sizing: border-box;
     min-height: 32px;
     display: inline-flex;

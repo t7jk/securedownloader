@@ -36,6 +36,7 @@ class PIT_Accountant {
         add_action( 'admin_post_nopriv_pit_reset_import_patterns', [ $this, 'handle_reset_import_patterns' ] );
         add_action( 'admin_post_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
         add_action( 'admin_post_nopriv_pit_delete_downloaded_files', [ $this, 'handle_delete_downloaded_files' ] );
+        add_filter( 'template_include', [ $this, 'use_fullscreen_template' ], 99 );
     }
 
     /**
@@ -53,6 +54,28 @@ class PIT_Accountant {
      */
     public function register_shortcode(): void {
         add_shortcode( 'pit_accountant_panel', [ $this, 'render_shortcode' ] );
+    }
+
+    /**
+     * Dla strony księgowego zwraca szablon pełnoekranowy (bez motywu).
+     *
+     * @param string $template Ścieżka do aktualnego szablonu.
+     * @return string Ścieżka do szablonu.
+     */
+    public function use_fullscreen_template( string $template ): string {
+        $accountant_url = get_option( 'pit_accountant_page_url', '' );
+        if ( $accountant_url === '' ) {
+            return $template;
+        }
+        $accountant_page_id = url_to_postid( $accountant_url );
+        if ( $accountant_page_id <= 0 || ! is_singular() ) {
+            return $template;
+        }
+        if ( (int) get_queried_object_id() !== (int) $accountant_page_id ) {
+            return $template;
+        }
+        $fullscreen = PIT_PLUGIN_DIR . 'templates/fullwidth-accountant.php';
+        return is_readable( $fullscreen ) ? $fullscreen : $template;
     }
 
     /**
@@ -364,12 +387,13 @@ class PIT_Accountant {
      */
     private function get_default_import_patterns(): array {
         return [
-            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => '*PIT-11*.pdf' ],
-            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla*.pdf' ],
-            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
-            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Imię', 'nazwa_pliku' => 'Informacja roczna*.pdf' ],
-            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '17 Pierwsze imie', 'nazwa_pliku' => '*PIT-11*.pdf' ],
-            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '16. Nazwisko', 'nazwa_pliku' => '*PIT-11*.pdf' ],
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => 'numer PESEL', 'nazwa_pliku' => 'NAZWISKO IMIĘ*PIT-11*rok RRRR.pdf' ],
+            [ 'wzorzec' => 'PESEL', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Identyfikator', 'nazwa_pliku' => 'Informacja roczna dla NAZWISKO IMIĘ.pdf' ],
+            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Nazwisko', 'nazwa_pliku' => 'Informacja roczna dla NAZWISKO IMIĘ.pdf' ],
+            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'Dane osoby ubezpieczonej', 'pole' => 'Imię', 'nazwa_pliku' => 'Informacja roczna dla NAZWISKO IMIĘ.pdf' ],
+            [ 'wzorzec' => 'IMIĘ', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '17 Pierwsze imie', 'nazwa_pliku' => 'NAZWISKO IMIĘ*PIT-11*rok RRRR.pdf' ],
+            [ 'wzorzec' => 'NAZWISKO', 'strona' => '1', 'pozycja' => 'C. DANE IDENTYFIKACYJNE', 'pole' => '16. Nazwisko', 'nazwa_pliku' => 'NAZWISKO IMIĘ*PIT-11*rok RRRR.pdf' ],
+            [ 'wzorzec' => 'RRRR', 'strona' => '1', 'pozycja' => 'w roku', 'pole' => '4. Rok', 'nazwa_pliku' => 'NAZWISKO IMIĘ*PIT-11*rok RRRR.pdf' ],
         ];
     }
 
@@ -741,7 +765,7 @@ class PIT_Accountant {
                 </div>
             </form>
 
-                <div class="pit-form-row pit-delete-downloaded-row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--pit-border, #ddd); display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+                <div class="pit-form-row pit-delete-downloaded-row" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--pit-border, #ddd); display: flex; flex-wrap: wrap; align-items: center; gap: 16px; align-content: center;">
                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-delete-downloaded-form" onsubmit="return confirm(<?php echo wp_json_encode( __( 'Czy na pewno usunąć z serwera wszystkie pliki, które zostały już pobrane? Tej operacji nie można cofnąć.', 'obsluga-dokumentow-ksiegowych' ) ); ?>);">
                         <?php wp_nonce_field( 'pit_delete_downloaded_files', 'pit_delete_downloaded_nonce' ); ?>
                         <input type="hidden" name="action" value="pit_delete_downloaded_files">
@@ -749,24 +773,25 @@ class PIT_Accountant {
                             <?php esc_html_e( 'Usuń pobrane', 'obsluga-dokumentow-ksiegowych' ); ?>
                         </button>
                     </form>
-                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-report-pdf-form" class="pit-report-pdf-form-inline">
+                    <style type="text/css">
+                        #pit-report-pdf-form { display: inline-flex !important; flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important; }
+                        #pit-report-pdf-form .pit-report-year-label { white-space: nowrap !important; flex-shrink: 0 !important; }
+                        #pit-report-pdf-form .pit-btn-generate-report { white-space: nowrap !important; flex-shrink: 0 !important; min-width: 180px !important; }
+                    </style>
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="pit-report-pdf-form" class="pit-report-pdf-form-inline" style="display: inline-flex !important; flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important;">
                         <?php wp_nonce_field( 'pit_report_pdf_nonce', 'pit_report_pdf_nonce' ); ?>
                         <input type="hidden" name="action" value="pit_generate_report_pdf">
-                        <div class="pit-report-year-block">
-                            <div class="pit-report-year-row">
-                                <span class="pit-report-year-label"><?php esc_html_e( 'Raport PDF – rok:', 'obsluga-dokumentow-ksiegowych' ); ?></span>
-                                <select name="year" id="pit-report-year">
-                                    <option value="0"><?php esc_html_e( 'Wszystkie lata', 'obsluga-dokumentow-ksiegowych' ); ?></option>
-                                    <?php
-                                    $years = $db->get_available_years();
-                                    foreach ( $years as $y ) :
-                                    ?>
-                                        <option value="<?php echo esc_attr( $y ); ?>"><?php echo esc_html( $y ); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <button type="submit" class="button pit-btn-generate-report"><?php esc_html_e( 'Generuj raport PDF', 'obsluga-dokumentow-ksiegowych' ); ?></button>
-                            </div>
-                        </div>
+                        <span class="pit-report-year-label" style="white-space: nowrap !important;"><?php esc_html_e( 'Raport PDF – rok:', 'obsluga-dokumentow-ksiegowych' ); ?></span>
+                        <select name="year" id="pit-report-year">
+                            <option value="0"><?php esc_html_e( 'Wszystkie lata', 'obsluga-dokumentow-ksiegowych' ); ?></option>
+                            <?php
+                            $years = $db->get_available_years();
+                            foreach ( $years as $y ) :
+                            ?>
+                                <option value="<?php echo esc_attr( $y ); ?>"><?php echo esc_html( $y ); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="submit" class="button pit-btn-generate-report" style="white-space: nowrap !important; min-width: 180px;"><?php esc_html_e( 'Generuj raport PDF', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                     </form>
                 </div>
             <script>
@@ -905,6 +930,7 @@ class PIT_Accountant {
                     <input type="hidden" name="action" value="pit_save_import_patterns">
                     <input type="hidden" name="pit_redirect_tab" value="wzorce">
                     <?php $wzorce = $this->get_import_patterns_option(); ?>
+                    <div class="pit-wzorce-table-wrap">
                     <table class="pit-table widefat striped" id="pit-wzorce-table">
                         <thead>
                             <tr>
@@ -921,14 +947,15 @@ class PIT_Accountant {
                                 <tr class="pit-wzorce-row">
                                     <td><input type="hidden" name="pit_import_patterns[<?php echo (int) $idx; ?>][_deleted]" value="0" class="pit-wzorce-deleted"><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][wzorzec]" value="<?php echo esc_attr( $row['wzorzec'] ); ?>" class="regular-text" placeholder="PESEL"></td>
                                     <td><input type="text" name="pit_import_patterns[<?php echo (int) $idx; ?>][strona]" value="<?php echo esc_attr( $row['strona'] ); ?>" class="small-text" placeholder="1" maxlength="10"></td>
-                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][pozycja]" class="pit-wzorce-field regular-text" placeholder="C. DANE IDENTYFIKACYJNE" rows="2"><?php echo esc_textarea( $row['pozycja'] ); ?></textarea></td>
-                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][pole]" class="pit-wzorce-field regular-text" placeholder="numer PESEL" rows="2"><?php echo esc_textarea( $row['pole'] ); ?></textarea></td>
-                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][nazwa_pliku]" class="pit-wzorce-field regular-text" placeholder="*.pdf" rows="2"><?php echo esc_textarea( $row['nazwa_pliku'] ?? '' ); ?></textarea></td>
+                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][pozycja]" class="pit-wzorce-field regular-text" placeholder="C. DANE IDENTYFIKACYJNE" rows="3"><?php echo esc_textarea( $row['pozycja'] ); ?></textarea></td>
+                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][pole]" class="pit-wzorce-field regular-text" placeholder="numer PESEL" rows="3"><?php echo esc_textarea( $row['pole'] ); ?></textarea></td>
+                                    <td><textarea name="pit_import_patterns[<?php echo (int) $idx; ?>][nazwa_pliku]" class="pit-wzorce-field regular-text" placeholder="*.pdf" rows="3"><?php echo esc_textarea( $row['nazwa_pliku'] ?? '' ); ?></textarea></td>
                                     <td style="white-space: nowrap;"><button type="button" class="button pit-remove-wzorce-row" aria-label="<?php esc_attr_e( 'Usuń wiersz', 'obsluga-dokumentow-ksiegowych' ); ?>"><?php esc_html_e( 'Usuń', 'obsluga-dokumentow-ksiegowych' ); ?></button></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div>
                     <div class="pit-wzorce-actions" style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
                         <button type="button" class="button" id="pit-add-wzorce-row"><?php esc_html_e( 'Dodaj wiersz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                         <button type="submit" class="button button-primary"><?php esc_html_e( 'Zapisz wzorce', 'obsluga-dokumentow-ksiegowych' ); ?></button>
@@ -938,7 +965,7 @@ class PIT_Accountant {
                     <?php wp_nonce_field( 'pit_reset_import_patterns', 'pit_reset_patterns_nonce' ); ?>
                     <input type="hidden" name="action" value="pit_reset_import_patterns">
                     <input type="hidden" name="pit_redirect_tab" value="wzorce">
-                    <button type="submit" class="button"><?php esc_html_e( 'Reset', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                    <button type="submit" class="button"><?php esc_html_e( 'Ustaw standardowe wartości', 'obsluga-dokumentow-ksiegowych' ); ?></button>
                 </form>
                 <script>
                 (function() {
@@ -958,9 +985,9 @@ class PIT_Accountant {
                         tr.className = 'pit-wzorce-row';
                         tr.innerHTML = '<td><input type="hidden" name="pit_import_patterns[' + idx + '][_deleted]" value="0" class="pit-wzorce-deleted"><input type="text" name="pit_import_patterns[' + idx + '][wzorzec]" value="" class="regular-text" placeholder="PESEL"></td>' +
                             '<td><input type="text" name="pit_import_patterns[' + idx + '][strona]" value="" class="small-text" placeholder="1" maxlength="10"></td>' +
-                            '<td><textarea name="pit_import_patterns[' + idx + '][pozycja]" class="pit-wzorce-field regular-text" placeholder="C. DANE IDENTYFIKACYJNE" rows="2"></textarea></td>' +
-                            '<td><textarea name="pit_import_patterns[' + idx + '][pole]" class="pit-wzorce-field regular-text" placeholder="numer PESEL" rows="2"></textarea></td>' +
-                            '<td><textarea name="pit_import_patterns[' + idx + '][nazwa_pliku]" class="pit-wzorce-field regular-text" placeholder="*.pdf" rows="2"></textarea></td>' +
+                            '<td><textarea name="pit_import_patterns[' + idx + '][pozycja]" class="pit-wzorce-field regular-text" placeholder="C. DANE IDENTYFIKACYJNE" rows="3"></textarea></td>' +
+                            '<td><textarea name="pit_import_patterns[' + idx + '][pole]" class="pit-wzorce-field regular-text" placeholder="numer PESEL" rows="3"></textarea></td>' +
+                            '<td><textarea name="pit_import_patterns[' + idx + '][nazwa_pliku]" class="pit-wzorce-field regular-text" placeholder="*.pdf" rows="3"></textarea></td>' +
                             '<td><button type="button" class="button pit-remove-wzorce-row" aria-label="Usuń wiersz">Usuń</button></td>';
                         tbody.appendChild(tr);
                     });
@@ -1113,6 +1140,26 @@ class PIT_Accountant {
                 $failed[] = [
                     'name'   => $name,
                     'reason' => __( 'Nie udało się zapisać pliku na serwerze.', 'obsluga-dokumentow-ksiegowych' ),
+                ];
+                continue;
+            }
+
+            $year_from_pdf = null;
+            $text = $this->extract_text_from_pdf( $target_path );
+            if ( $text !== '' ) {
+                $year_from_pdf = $this->extract_year_from_pdf_by_rules( $text, $target_path );
+            }
+            if ( $year_from_pdf !== null && (int) $year_from_pdf !== (int) $parsed['tax_year'] ) {
+                @unlink( $target_path );
+                $errors++;
+                $failed[] = [
+                    'name'   => $name,
+                    'reason' => sprintf(
+                        /* translators: 1: year from PDF, 2: year from filename */
+                        __( 'Rok w dokumencie PDF (%1$d) nie zgadza się z rokiem w nazwie pliku (%2$d).', 'obsluga-dokumentow-ksiegowych' ),
+                        $year_from_pdf,
+                        (int) $parsed['tax_year']
+                    ),
                 ];
                 continue;
             }
@@ -1472,6 +1519,60 @@ class PIT_Accountant {
     }
 
     /**
+     * Wyciąga rok (RRRR) z tekstu PDF według reguł RRRR z zakładki Wzorce (np. sekcja "w roku", pole "4. Rok").
+     *
+     * @param string $text      Tekst wyciągnięty z PDF.
+     * @param string $file_path Ścieżka do pliku – do dopasowania wzorca „Nazwa pliku”.
+     * @return int|null Rok (np. 2025) lub null gdy nie znaleziono.
+     */
+    private function extract_year_from_pdf_by_rules( string $text, string $file_path = '' ): ?int {
+        $filename = $file_path !== '' ? basename( $file_path ) : '';
+        $rules    = $this->get_pesel_search_rules_option( $filename );
+        $current_year = (int) date( 'Y' );
+        foreach ( $rules as $rule ) {
+            if ( ( $rule['szukany_numer'] ?? '' ) !== 'RRRR' ) {
+                continue;
+            }
+            $header  = $rule['nazwa_naglowka'] ?? '';
+            $section = $rule['nazwa_sekcji'] ?? '';
+            $field   = $rule['nr_pola'] ?? '';
+            if ( $header !== '' ) {
+                $head = substr( $text, 0, 1500 );
+                $header_esc = preg_quote( $header, '/' );
+                if ( ! preg_match( '/' . $header_esc . '/iu', $head ) ) {
+                    continue;
+                }
+            }
+            $pos = 0;
+            if ( $section !== '' ) {
+                $section_esc = preg_quote( $section, '/' );
+                if ( preg_match( '/' . $section_esc . '\b/ui', $text, $m, PREG_OFFSET_CAPTURE ) ) {
+                    $pos = $m[0][1];
+                } else {
+                    continue;
+                }
+            }
+            $chunk = substr( $text, $pos, 800 );
+            if ( $field !== '' ) {
+                $field_esc = preg_quote( $field, '/' );
+                if ( ! preg_match( '/' . $field_esc . '\b/ui', $chunk ) ) {
+                    continue;
+                }
+            }
+            if ( preg_match( '/\b(19\d{2}|20\d{2})\b/', $chunk, $ym ) ) {
+                $y = (int) $ym[1];
+                if ( $y >= 2000 && $y <= $current_year + 1 ) {
+                    return $y;
+                }
+                if ( $y >= 1990 && $y <= 1999 ) {
+                    return $y;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Wyciąga tekst z pliku PDF (jeśli dostępne narzędzie).
      *
      * @param string $file_path Ścieżka do PDF.
@@ -1771,9 +1872,14 @@ class PIT_Accountant {
         .pit-full-name { font-weight: 700; text-transform: uppercase; }
         .pit-doc-filename { font-size: 0.85em; color: #666; display: block; margin-top: 2px; }
         footer { margin-top: 40px; font-size: 12px; color: #666; text-align: center; }
+        .report-actions { margin-bottom: 20px; }
+        .report-actions button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
+    <div class="report-actions">
+        <button type="button" onclick="window.history.back()"><?php esc_html_e( 'Powrót', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+    </div>
     <header>
         <h1><?php echo esc_html( $company_name ); ?></h1>
         <?php if ( $company_address ) : ?>
@@ -1899,8 +2005,11 @@ class PIT_Accountant {
     </style>
 </head>
 <body>
-    <div class="no-print print-btn">
-        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+    <div class="no-print print-btn" style="display: flex; gap: 12px; margin-bottom: 20px;">
+        <button type="button" onclick="window.history.back()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+            <?php esc_html_e( 'Powrót', 'obsluga-dokumentow-ksiegowych' ); ?>
+        </button>
+        <button type="button" onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
             <?php esc_html_e( 'Drukuj / Zapisz jako PDF', 'obsluga-dokumentow-ksiegowych' ); ?>
         </button>
     </div>

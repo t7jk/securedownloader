@@ -188,11 +188,14 @@ class PIT_Admin {
     public function render_field_checkbox( array $args ): void {
         $name  = $args['name'];
         $value = get_option( $name, 0 );
+        if ( ! empty( $args['with_hidden_zero'] ) ) {
+            printf( '<input type="hidden" name="%s" value="0">', esc_attr( $name ) );
+        }
         printf(
             '<label><input type="checkbox" name="%s" value="1" %s> %s</label>',
             esc_attr( $name ),
             checked( 1, $value, false ),
-            esc_html__( 'Tak', 'obsluga-dokumentow-ksiegowych' )
+            esc_html( $args['label'] ?? __( 'Tak', 'obsluga-dokumentow-ksiegowych' ) )
         );
         if ( ! empty( $args['description'] ) ) {
             printf( '<p class="description">%s</p>', esc_html( $args['description'] ) );
