@@ -59,6 +59,7 @@ delete_option( 'pit_import_patterns' );
 delete_option( 'pit_pesel_search_rules' );
 delete_option( 'pit_version' );
 delete_option( 'pit_enabled' );
+delete_option( 'pit_developer_mode' );
 
 $admin = get_role( 'administrator' );
 if ( $admin ) {

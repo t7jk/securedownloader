@@ -242,6 +242,48 @@ body.pit-client-fullscreen .pit-client-page {
     color: var(--pit-text);
 }
 
+.pit-upload-debug-wrap {
+    margin-top: 10px;
+}
+
+.pit-upload-debug-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--pit-text);
+    margin-bottom: 4px;
+}
+
+.pit-upload-debug-actions {
+    margin-top: 12px;
+}
+
+.pit-upload-debug-done-text {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    color: var(--pit-text);
+}
+
+.pit-upload-debug-log {
+    display: block;
+    width: 100%;
+    max-height: 280px;
+    overflow: auto;
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.4;
+    font-family: ui-monospace, monospace;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: 1px solid var(--pit-border);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 /* Imię i nazwisko w liście dokumentów – pogrubione, wielkie litery (wysoka specyficzność) */
 .pit-accountant-panel #pit-files-table td .pit-full-name,
 .pit-accountant-panel #pit-files-table td strong.pit-full-name {
@@ -449,6 +491,12 @@ body.pit-client-fullscreen .pit-client-page {
     background: var(--pit-error-bg);
     border-color: var(--pit-error-border);
     color: var(--pit-error-text);
+}
+
+.pit-warning {
+    background: var(--pit-warning);
+    border-color: #ffc107;
+    color: #856404;
 }
 
 /* Tabele */

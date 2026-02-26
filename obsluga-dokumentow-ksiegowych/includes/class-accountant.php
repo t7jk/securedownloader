@@ -641,9 +641,27 @@ class PIT_Accountant {
                     <p><?php esc_html_e( 'Nie zaimportowano następujących plików:', 'obsluga-dokumentow-ksiegowych' ); ?></p>
                     <ul class="pit-failed-files-list">
                         <?php foreach ( $upload_failed_list as $item ) : ?>
-                            <li><strong><?php echo esc_html( $item['name'] ); ?></strong> — <?php echo esc_html( $item['reason'] ); ?></li>
+                            <li><strong><?php echo esc_html( $item['name'] ); ?></strong> — <?php echo nl2br( esc_html( $item['reason'] ) ); ?></li>
                         <?php endforeach; ?>
                     </ul>
+                </div>
+            <?php endif; ?>
+            <?php
+            $pesel_diagnostics = get_transient( 'pit_upload_pesel_diagnostics_' . get_current_user_id() );
+            if ( is_array( $pesel_diagnostics ) && ! empty( $pesel_diagnostics ) ) :
+                delete_transient( 'pit_upload_pesel_diagnostics_' . get_current_user_id() );
+                ?>
+                <div class="pit-message pit-warning">
+                    <p><strong><?php esc_html_e( 'Tryb deweloperski: nie rozpoznano PESEL dla części osób', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
+                    <p><?php esc_html_e( 'Poniższe informacje pomagają zdiagnozować problem na produkcji (gdy u Ciebie działa, a na serwerze klienta nie).', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                    <?php foreach ( $pesel_diagnostics as $diag ) : ?>
+                        <p><strong><?php echo esc_html( (string) ( $diag['full_name'] ?? '' ) ); ?></strong></p>
+                        <ul class="pit-pesel-diagnostics-list">
+                            <?php foreach ( (array) ( $diag['reasons'] ?? [] ) as $reason ) : ?>
+                                <li><?php echo esc_html( (string) $reason ); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
 
@@ -848,6 +866,16 @@ class PIT_Accountant {
                         </div>
                         <span class="pit-upload-progress-text" id="pit-upload-progress-text"></span>
                     </div>
+                    <?php if ( (int) get_option( 'pit_developer_mode', 0 ) === 1 ) : ?>
+                    <div class="pit-form-row pit-upload-debug-wrap" id="pit-upload-debug-wrap" style="display:none;">
+                        <label class="pit-upload-debug-label"><?php esc_html_e( 'Log rozpoznawania (Ctrl+A aby skopiować)', 'obsluga-dokumentow-ksiegowych' ); ?></label>
+                        <pre class="pit-upload-debug-log" id="pit-upload-debug-log" aria-label="<?php esc_attr_e( 'Log rozpoznawania plików', 'obsluga-dokumentow-ksiegowych' ); ?>"></pre>
+                        <div class="pit-upload-debug-actions" id="pit-upload-debug-actions" style="display:none;">
+                            <p class="pit-upload-debug-done-text"><?php esc_html_e( 'Wgrywanie zakończone. Skopiuj log (Ctrl+A), następnie kliknij Kontynuuj.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                            <button type="button" class="button button-primary" id="pit-upload-continue-btn"><?php esc_html_e( 'Kontynuuj', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                     <div class="pit-form-row">
                         <button type="submit" class="button button-primary" id="pit-upload-submit">
                             <?php esc_html_e( 'Wgraj dokumenty', 'obsluga-dokumentow-ksiegowych' ); ?>
@@ -861,7 +889,17 @@ class PIT_Accountant {
                 var progressWrap = document.getElementById('pit-upload-progress-wrap');
                 var progressBar = document.getElementById('pit-upload-progress-bar');
                 var progressText = document.getElementById('pit-upload-progress-text');
+                var debugWrap = document.getElementById('pit-upload-debug-wrap');
+                var debugLog = document.getElementById('pit-upload-debug-log');
+                var debugActions = document.getElementById('pit-upload-debug-actions');
+                var continueBtn = document.getElementById('pit-upload-continue-btn');
                 var submitBtn = document.getElementById('pit-upload-submit');
+                var pendingRedirectUrl = null;
+                if (continueBtn) {
+                    continueBtn.addEventListener('click', function() {
+                        if (pendingRedirectUrl) { window.location.href = pendingRedirectUrl; }
+                    });
+                }
                 if (!form || !fileInput) return;
                 var uploadUrl = form.getAttribute('data-upload-url') || form.action;
                 form.addEventListener('submit', function(e) {
@@ -872,7 +910,11 @@ class PIT_Accountant {
                     if (!nonceEl || !nonceEl.value) { alert('Błąd: brak nonce.'); return false; }
                     var total = files.length;
                     var current = 0;
+                    pendingRedirectUrl = null;
+                    if (debugActions) debugActions.style.display = 'none';
                     if (progressWrap) progressWrap.style.display = '';
+                    if (debugWrap) { debugWrap.style.display = ''; }
+                    if (debugLog) { debugLog.textContent = ''; }
                     if (submitBtn) submitBtn.disabled = true;
                     if (progressBar) progressBar.style.width = '0%';
                     function updateProgress(n, ofTotal) {
@@ -880,10 +922,23 @@ class PIT_Accountant {
                         if (progressBar) progressBar.style.width = pct + '%';
                         if (progressText) progressText.textContent = 'Wgrywanie pliku ' + n + ' z ' + ofTotal;
                     }
+                    function setDebugLog(lines) {
+                        if (!debugLog || !lines) return;
+                        var text = Array.isArray(lines) ? lines.join('\n') : String(lines);
+                        debugLog.textContent = text;
+                        debugLog.scrollTop = debugLog.scrollHeight;
+                    }
                     function sendNext() {
                         if (current >= total) {
-                            if (progressWrap) progressWrap.style.display = 'none';
-                            if (submitBtn) submitBtn.disabled = false;
+                            if (debugWrap && debugActions && debugLog && debugLog.textContent.trim() !== '') {
+                                debugActions.style.display = '';
+                                pendingRedirectUrl = window.location.href;
+                                if (submitBtn) submitBtn.disabled = false;
+                                debugActions.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                            } else {
+                                if (progressWrap) progressWrap.style.display = 'none';
+                                if (submitBtn) submitBtn.disabled = false;
+                            }
                             return;
                         }
                         updateProgress(current + 1, total);
@@ -896,9 +951,21 @@ class PIT_Accountant {
                         fetch(uploadUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                             .then(function(r) { return r.json(); })
                             .then(function(data) {
-                                if (data && data.success && data.data && data.data.done === true && data.data.redirect_url) {
-                                    window.location.href = data.data.redirect_url;
-                                    return;
+                                if (data && data.success && data.data) {
+                                    if (data.data.debug_log && data.data.debug_log.length) setDebugLog(data.data.debug_log);
+                                    if (data.data.done === true && data.data.redirect_url) {
+                                        if (debugWrap && debugActions) {
+                                            pendingRedirectUrl = data.data.redirect_url;
+                                            if (progressBar) progressBar.style.width = '100%';
+                                            if (progressText) progressText.textContent = '';
+                                            debugActions.style.display = '';
+                                            debugActions.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                                            if (submitBtn) submitBtn.disabled = false;
+                                            return;
+                                        }
+                                        window.location.href = data.data.redirect_url;
+                                        return;
+                                    }
                                 }
                                 current++;
                                 sendNext();
@@ -1064,16 +1131,22 @@ class PIT_Accountant {
         if ( $is_chunked ) {
             $state = get_transient( $chunk_key );
             if ( ! is_array( $state ) ) {
-                $state = [ 'uploaded' => 0, 'errors' => 0, 'skipped' => 0, 'failed' => [] ];
+                $state = [ 'uploaded' => 0, 'errors' => 0, 'skipped' => 0, 'failed' => [], 'debug_log' => [] ];
+            }
+            if ( ! isset( $state['debug_log'] ) || ! is_array( $state['debug_log'] ) ) {
+                $state['debug_log'] = [];
             }
         } else {
-            $state = [ 'uploaded' => 0, 'errors' => 0, 'skipped' => 0, 'failed' => [] ];
+            $state = [ 'uploaded' => 0, 'errors' => 0, 'skipped' => 0, 'failed' => [], 'debug_log' => [] ];
         }
 
         require_once ABSPATH . 'wp-admin/includes/file.php';
 
         $db      = PIT_Database::get_instance();
         $filters = get_option( 'pit_filename_filters', [] );
+        if ( empty( $filters ) || ! is_array( $filters ) ) {
+            $filters = pit_get_default_filename_filters();
+        }
 
         $files   = $_FILES['pit_pdfs'];
         $count   = count( $files['name'] );
@@ -1081,18 +1154,30 @@ class PIT_Accountant {
         $errors   = 0;
         $skipped  = 0;
         $failed   = [];
+        $dev_log  = (int) get_option( 'pit_developer_mode', 0 ) === 1;
+        $chunk_log = [];
+        $chunk_index_one = $is_chunked ? (int) ( $_POST['pit_upload_chunk_index'] ?? 0 ) + 1 : 1;
+        $total_chunks_one = $is_chunked ? (int) ( $_POST['pit_upload_total_chunks'] ?? 1 ) : $count;
         pit_debug_log( 'handle_upload: files count=' . $count . ( $is_chunked ? ' (chunked)' : '' ) );
 
         for ( $i = 0; $i < $count; $i++ ) {
             if ( $i > 0 && $i % 10 === 0 ) {
                 pit_debug_log( 'handle_upload: processed ' . $i . '/' . $count );
             }
+            $num = $is_chunked ? $chunk_index_one : ( $i + 1 );
+            $den = $is_chunked ? $total_chunks_one : $count;
+            $line_prefix = $dev_log ? '[' . $num . '/' . $den . '] ' : '';
+
             if ( $files['error'][$i] !== UPLOAD_ERR_OK ) {
                 $errors++;
                 $failed[] = [
                     'name'   => $files['name'][$i],
                     'reason' => __( 'Błąd wgrywania pliku.', 'obsluga-dokumentow-ksiegowych' ),
                 ];
+                if ( $dev_log ) {
+                    $chunk_log[] = $line_prefix . __( 'Plik:', 'obsluga-dokumentow-ksiegowych' ) . ' ' . $files['name'][$i];
+                    $chunk_log[] = '  → ' . __( 'błąd: Błąd wgrywania pliku (upload error code)', 'obsluga-dokumentow-ksiegowych' );
+                }
                 continue;
             }
 
@@ -1106,6 +1191,10 @@ class PIT_Accountant {
                     'name'   => $name,
                     'reason' => __( 'Nieprawidłowy typ pliku (wymagany PDF).', 'obsluga-dokumentow-ksiegowych' ),
                 ];
+                if ( $dev_log ) {
+                    $chunk_log[] = $line_prefix . __( 'Plik:', 'obsluga-dokumentow-ksiegowych' ) . ' ' . $name;
+                    $chunk_log[] = '  → ' . __( 'błąd: Nieprawidłowy typ pliku (wymagany PDF)', 'obsluga-dokumentow-ksiegowych' );
+                }
                 continue;
             }
 
@@ -1118,11 +1207,36 @@ class PIT_Accountant {
             }
             if ( ! $parsed ) {
                 $errors++;
+                $reason = __( 'Nie rozpoznano wzorca nazwy pliku.', 'obsluga-dokumentow-ksiegowych' );
+                if ( $dev_log ) {
+                    $from_option = get_option( 'pit_filename_filters', [] );
+                    $used_default = ( empty( $from_option ) || ! is_array( $from_option ) );
+                    $filter_source = $used_default
+                        ? __( 'domyślne (pit_get_default_filename_filters())', 'obsluga-dokumentow-ksiegowych' )
+                        : __( 'opcja pit_filename_filters w Ustawieniach', 'obsluga-dokumentow-ksiegowych' );
+                    $reason .= "\n\n" . __( 'Szczegóły (tryb deweloperski):', 'obsluga-dokumentow-ksiegowych' )
+                        . "\n- " . __( 'Nazwa pliku:', 'obsluga-dokumentow-ksiegowych' ) . ' "' . $name . '"'
+                        . "\n- " . sprintf(
+                            /* translators: 1: number of filters, 2: filter source description */
+                            __( 'Sprawdzono %1$d filtrów (%2$s). Żaden filtr nie dopasował nazwy.', 'obsluga-dokumentow-ksiegowych' ),
+                            count( $filters ),
+                            $filter_source
+                        )
+                        . "\n- " . __( 'Fallback parse_filename() wymaga formatu: PIT-11_rok_RRRR_Nazwisko_Imię_11cyfrPESEL.pdf (np. PIT-11_rok_2025_Kowalski_Jan_12345678901.pdf).', 'obsluga-dokumentow-ksiegowych' )
+                        . "\n- " . __( 'Co zrobić: dopasuj nazwę pliku do jednego z wzorców w Ustawieniach (Filtry nazw plików) albo zmień wzorce tak, by obejmowały Twoje nazwy.', 'obsluga-dokumentow-ksiegowych' );
+                    $chunk_log[] = $line_prefix . __( 'Plik:', 'obsluga-dokumentow-ksiegowych' ) . ' ' . $name;
+                    $chunk_log[] = '  → ' . __( 'błąd: Nie rozpoznano wzorca nazwy pliku', 'obsluga-dokumentow-ksiegowych' );
+                }
                 $failed[] = [
                     'name'   => $name,
-                    'reason' => __( 'Nie rozpoznano wzorca nazwy pliku.', 'obsluga-dokumentow-ksiegowych' ),
+                    'reason' => $reason,
                 ];
                 continue;
+            }
+
+            if ( $dev_log ) {
+                $chunk_log[] = $line_prefix . __( 'Plik:', 'obsluga-dokumentow-ksiegowych' ) . ' ' . $name;
+                $chunk_log[] = '  → full_name=' . ( $parsed['full_name'] ?? '' ) . ', tax_year=' . ( $parsed['tax_year'] ?? '' ) . ', pesel=' . ( $parsed['pesel'] ?? '' );
             }
 
             $upload_dir = wp_upload_dir();
@@ -1141,6 +1255,9 @@ class PIT_Accountant {
                     'name'   => $name,
                     'reason' => __( 'Nie udało się zapisać pliku na serwerze.', 'obsluga-dokumentow-ksiegowych' ),
                 ];
+                if ( $dev_log ) {
+                    $chunk_log[] = '  → ' . __( 'błąd: Nie udało się zapisać pliku na serwerze', 'obsluga-dokumentow-ksiegowych' );
+                }
                 continue;
             }
 
@@ -1161,7 +1278,18 @@ class PIT_Accountant {
                         (int) $parsed['tax_year']
                     ),
                 ];
+                if ( $dev_log ) {
+                    $chunk_log[] = '  → ' . sprintf(
+                        __( 'błąd: Rok w PDF (%1$d) ≠ rok w nazwie (%2$d)', 'obsluga-dokumentow-ksiegowych' ),
+                        $year_from_pdf,
+                        (int) $parsed['tax_year']
+                    );
+                }
                 continue;
+            }
+
+            if ( $dev_log && $year_from_pdf !== null ) {
+                $chunk_log[] = '  → rok z PDF: ' . $year_from_pdf;
             }
 
             $file_url = $upload_dir['baseurl'] . '/obsluga-dokumentow-ksiegowych/' . $parsed['tax_year'] . '/' . $safe_name;
@@ -1176,16 +1304,26 @@ class PIT_Accountant {
 
             if ( $result ) {
                 $uploaded++;
+                if ( $dev_log ) {
+                    $chunk_log[] = '  → ' . __( 'zapis do bazy: OK', 'obsluga-dokumentow-ksiegowych' );
+                }
             } else {
                 $errors++;
                 $failed[] = [
                     'name'   => $name,
                     'reason' => __( 'Błąd zapisu do bazy danych.', 'obsluga-dokumentow-ksiegowych' ),
                 ];
+                if ( $dev_log ) {
+                    $chunk_log[] = '  → ' . __( 'błąd: Błąd zapisu do bazy danych', 'obsluga-dokumentow-ksiegowych' );
+                }
                 if ( file_exists( $target_path ) ) {
                     unlink( $target_path );
                 }
             }
+        }
+
+        if ( $dev_log && ! empty( $chunk_log ) ) {
+            $state['debug_log'] = array_merge( $state['debug_log'], $chunk_log );
         }
 
         $state['uploaded'] += $uploaded;
@@ -1205,6 +1343,7 @@ class PIT_Accountant {
                 if ( $state['uploaded'] > 0 ) {
                     pit_debug_log( 'handle_upload: before fill_missing_pesel_after_upload (chunked last)' );
                     $this->fill_missing_pesel_after_upload( $db );
+                    $this->collect_pesel_diagnostics_after_upload( $db );
                 }
                 delete_transient( $chunk_key );
                 $redirect = add_query_arg( [
@@ -1216,14 +1355,23 @@ class PIT_Accountant {
                     set_transient( 'pit_upload_failed_files_' . get_current_user_id(), $state['failed'], 60 );
                     $redirect = add_query_arg( 'pit_upload_failed', '1', $redirect );
                 }
-                wp_send_json_success( [ 'done' => true, 'redirect_url' => $redirect ] );
+                $response = [ 'done' => true, 'redirect_url' => $redirect ];
+                if ( $dev_log && ! empty( $state['debug_log'] ) ) {
+                    $response['debug_log'] = $state['debug_log'];
+                }
+                wp_send_json_success( $response );
             }
-            wp_send_json_success( [ 'done' => false ] );
+            $response = [ 'done' => false ];
+            if ( $dev_log && ! empty( $state['debug_log'] ) ) {
+                $response['debug_log'] = $state['debug_log'];
+            }
+            wp_send_json_success( $response );
         }
 
         if ( $state['uploaded'] > 0 ) {
             pit_debug_log( 'handle_upload: before fill_missing_pesel_after_upload' );
             $this->fill_missing_pesel_after_upload( $db );
+            $this->collect_pesel_diagnostics_after_upload( $db );
         }
 
         pit_debug_log( 'handle_upload: before redirect' );
@@ -1443,6 +1591,125 @@ class PIT_Accountant {
             return $unique[0];
         }
         return null;
+    }
+
+    /**
+     * Diagnostyka: dlaczego nie rozpoznano PESEL dla danej osoby (tryb deweloperski).
+     * Zwraca listę zrozumiałych przyczyn – do wyświetlenia po wgraniu, gdy PESEL pozostał pusty.
+     *
+     * @param string       $full_name full_name osoby.
+     * @param PIT_Database $db        Instancja bazy.
+     * @return string[] Lista przyczyn (po polsku).
+     */
+    private function diagnose_pesel_failure( string $full_name, PIT_Database $db ): array {
+        global $wpdb;
+
+        $key   = pit_person_match_key( $full_name );
+        if ( $key === '' ) {
+            return [ __( 'Nie można zidentyfikować osoby (pusta full_name).', 'obsluga-dokumentow-ksiegowych' ) ];
+        }
+
+        $table = PIT_Database::$table_files;
+        $all   = $wpdb->get_results(
+            "SELECT id, full_name, file_path FROM {$table} WHERE (pesel IS NULL OR pesel = '') ORDER BY id ASC",
+            OBJECT
+        );
+        $rows  = array_filter( $all, function ( $row ) use ( $key ) {
+            return pit_person_match_key( (string) $row->full_name ) === $key;
+        } );
+        $rows  = array_values( $rows );
+
+        if ( empty( $rows ) ) {
+            return [ __( 'Brak plików w bazie z pustym PESEL dla tej osoby.', 'obsluga-dokumentow-ksiegowych' ) ];
+        }
+
+        $reasons   = [];
+        $first_row = $rows[0];
+        $file_path = $first_row->file_path;
+        $filename  = $file_path !== '' ? basename( $file_path ) : '';
+
+        if ( ! preg_match( '/\d{11}/', $filename ) ) {
+            $reasons[] = __( 'W nazwie pliku nie ma numeru PESEL (11 cyfr). Wtyczka szuka PESEL w treści PDF – poniżej wynik tej próby.', 'obsluga-dokumentow-ksiegowych' );
+        }
+
+        if ( ! file_exists( $file_path ) ) {
+            $reasons[] = __( 'Plik PDF nie istnieje na dysku (ścieżka usunięta lub niedostępna).', 'obsluga-dokumentow-ksiegowych' );
+            return $reasons;
+        }
+
+        $text = $this->extract_text_from_pdf( $file_path );
+        if ( $text === '' ) {
+            $reasons[] = __( 'Nie udało się wyciągnąć tekstu z PDF. Na serwerze może brakować narzędzia pdftotext (np. pakiet poppler-utils). Sprawdź: pdftotext -v w terminalu.', 'obsluga-dokumentow-ksiegowych' );
+            return $reasons;
+        }
+
+        $rules = $this->get_pesel_search_rules_option( $filename );
+        if ( empty( $rules ) ) {
+            $reasons[] = sprintf(
+                /* translators: %s: filename */
+                __( 'Brak wzorców w zakładce Wzorce pasujących do nazwy pliku. Kolumna „Nazwa pliku” we wzorcach musi pasować do Twoich plików (np. „NAZWISKO IMIĘ*PIT-11*rok RRRR.pdf” lub „Informacja roczna dla NAZWISKO IMIĘ.pdf”). Sprawdzana nazwa: %s', 'obsluga-dokumentow-ksiegowych' ),
+                $filename
+            );
+        } else {
+            $from_rules = $this->extract_pesel_by_document_rules( $text, $file_path );
+            if ( $from_rules === null ) {
+                $reasons[] = __( 'Wzorce z zakładki Wzorce nie znalazły PESEL w treści PDF. Możliwe przyczyny: nagłówek (np. „PIT-11” lub „Informacja”) nie występuje w pierwszych znakach dokumentu; sekcja (np. „C. DANE IDENTYFIKACYJNE” lub „Dane osoby ubezpieczonej”) nie została znaleziona w PDF; w wyznaczonym fragmencie nie ma numeru 11-cyfrowego lub suma kontrolna PESEL jest błędna. Porównaj wzorce z rzeczywistą treścią PDF na serwerze.', 'obsluga-dokumentow-ksiegowych' );
+            }
+        }
+
+        $found_11 = [];
+        foreach ( preg_split( '/\r\n|\r|\n/', $text ) as $line ) {
+            if ( preg_match_all( '/\b(\d{11})\b/', $line, $m ) ) {
+                foreach ( $m[1] as $p ) {
+                    $found_11[ $p ] = true;
+                }
+            }
+        }
+        $unique = array_keys( $found_11 );
+        if ( empty( $unique ) ) {
+            $reasons[] = __( 'W wyciągniętym tekście PDF nie znaleziono żadnego numeru 11-cyfrowego (PESEL). Dokument może być zeskanowany jako obraz – pdftotext nie odczyta tekstu z obrazów.', 'obsluga-dokumentow-ksiegowych' );
+            return $reasons;
+        }
+
+        $valid = array_values( array_filter( $unique, function ( $p ) {
+            return function_exists( 'pit_validate_pesel_checksum' ) && pit_validate_pesel_checksum( $p );
+        } ) );
+        if ( empty( $valid ) ) {
+            $reasons[] = sprintf(
+                /* translators: %d: count of 11-digit numbers found */
+                __( 'Znaleziono %d numer(ów) 11-cyfrowych, ale żaden nie przeszedł walidacji sumy kontrolnej PESEL (funkcja pit_validate_pesel_checksum).', 'obsluga-dokumentow-ksiegowych' ),
+                count( $unique )
+            );
+            return $reasons;
+        }
+        if ( count( $valid ) > 1 ) {
+            $reasons[] = __( 'W dokumencie znaleziono więcej niż jeden różny prawidłowy PESEL – wtyczka nie przypisuje automatycznie, aby uniknąć pomyłki. Ustaw PESEL ręcznie (link „Nie dopasowano”) lub doprecyzuj wzorce w zakładce Wzorce.', 'obsluga-dokumentow-ksiegowych' );
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * Zbiera diagnostykę PESEL dla wszystkich osób z pustym PESEL i zapisuje w transiencie (tylko w trybie deweloperskim).
+     */
+    private function collect_pesel_diagnostics_after_upload( PIT_Database $db ): void {
+        if ( (int) get_option( 'pit_developer_mode', 0 ) !== 1 ) {
+            return;
+        }
+        $persons = $db->get_person_ids_with_empty_pesel();
+        if ( empty( $persons ) ) {
+            return;
+        }
+        $out = [];
+        foreach ( $persons as $full_name ) {
+            $reasons = $this->diagnose_pesel_failure( $full_name, $db );
+            if ( ! empty( $reasons ) ) {
+                $out[] = [ 'full_name' => $full_name, 'reasons' => $reasons ];
+            }
+        }
+        if ( ! empty( $out ) ) {
+            set_transient( 'pit_upload_pesel_diagnostics_' . get_current_user_id(), $out, 120 );
+        }
     }
 
     /**
