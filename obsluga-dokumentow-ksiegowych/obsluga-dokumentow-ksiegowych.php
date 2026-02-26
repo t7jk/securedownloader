@@ -362,6 +362,7 @@ function pit_init_plugin(): void {
 	PIT_Client::get_instance();
 
 	load_plugin_textdomain( 'obsluga-dokumentow-ksiegowych', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+	add_filter( 'load_textdomain_mofile', 'pit_load_english_fallback_for_unknown_locales', 10, 2 );
 
 	add_action( 'template_redirect', 'pit_send_nocache_headers_for_panel_pages', 1 );
 	add_action( 'admin_init', 'pit_send_nocache_headers_admin_if_plugin_page', 1 );
@@ -371,6 +372,33 @@ function pit_init_plugin(): void {
 	add_action( 'admin_post_nopriv_pit_scan_uploaded_files', 'pit_send_nocache_headers_early', 1 );
 
 	pit_sync_files();
+}
+
+/**
+ * Ładuje angielski (en_US.mo) gdy język strony lub użytkownika nie jest polski.
+ * Dzięki temu wtyczka pokazuje angielski m.in. gdy w profilu użytkownika jest ustawiony angielski.
+ *
+ * @param string $mofile Ścieżka do pliku .mo.
+ * @param string $domain  Domena tekstowa.
+ * @return string Ścieżka do .mo (oryginalna lub en_US).
+ */
+function pit_load_english_fallback_for_unknown_locales( string $mofile, string $domain ): string {
+	if ( $domain !== 'obsluga-dokumentow-ksiegowych' ) {
+		return $mofile;
+	}
+	$locale = get_locale();
+	if ( $locale === 'pl_PL' ) {
+		if ( function_exists( 'get_user_locale' ) && is_user_logged_in() && get_user_locale() !== 'pl_PL' ) {
+			$locale = get_user_locale();
+		} else {
+			return $mofile;
+		}
+	}
+	if ( $locale === 'pl_PL' ) {
+		return $mofile;
+	}
+	$en_mo = PIT_PLUGIN_DIR . 'languages/obsluga-dokumentow-ksiegowych-en_US.mo';
+	return file_exists( $en_mo ) ? $en_mo : $mofile;
 }
 
 /**

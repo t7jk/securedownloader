@@ -658,7 +658,7 @@ class PIT_Accountant {
 
         ?>
         <div class="pit-accountant-panel">
-            <h2><?php esc_html_e( 'Panel księgowego 1.6', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
+            <h2><?php esc_html_e( 'Panel księgowego 1.7', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
 
             <?php if ( $message ) : ?>
                 <div class="pit-message <?php echo esc_attr( $message_class ); ?>">
@@ -1120,7 +1120,7 @@ class PIT_Accountant {
                             '<td><textarea name="pit_import_patterns[' + idx + '][pozycja]" class="pit-wzorce-field regular-text" placeholder="C. DANE IDENTYFIKACYJNE" rows="3"></textarea></td>' +
                             '<td><textarea name="pit_import_patterns[' + idx + '][pole]" class="pit-wzorce-field regular-text" placeholder="numer PESEL" rows="3"></textarea></td>' +
                             '<td><textarea name="pit_import_patterns[' + idx + '][nazwa_pliku]" class="pit-wzorce-field regular-text" placeholder="*.pdf" rows="3"></textarea></td>' +
-                            '<td><button type="button" class="button pit-remove-wzorce-row" aria-label="Usuń wiersz">Usuń</button></td>';
+                            '<td><button type="button" class="button pit-remove-wzorce-row" aria-label="' . esc_attr( __( 'Usuń wiersz', 'obsluga-dokumentow-ksiegowych' ) ) . '">' . esc_html( __( 'Usuń', 'obsluga-dokumentow-ksiegowych' ) ) . '</button></td>';
                         tbody.appendChild(tr);
                     });
                     tbody.addEventListener('click', function(e) {
