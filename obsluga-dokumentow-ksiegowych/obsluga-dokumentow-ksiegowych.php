@@ -127,6 +127,20 @@ function pit_get_upload_url(): string {
 }
 
 /**
+ * Zwiększa limit pamięci PHP przed parsowaniem PDF (Smalot PdfParser zużywa dużo RAM).
+ * Wywołuj przed operacjami wgrywania / skanowania / ekstrakcji tekstu z PDF.
+ */
+function pit_raise_memory_for_pdf(): void {
+	if ( function_exists( 'wp_raise_memory_limit' ) ) {
+		wp_raise_memory_limit( 'admin' );
+	}
+	$current = (int) ini_get( 'memory_limit' );
+	if ( $current > 0 && $current < 512 ) {
+		@ini_set( 'memory_limit', '512M' );
+	}
+}
+
+/**
  * Sprawdza, czy jest dostępna ekstrakcja tekstu z PDF (pdftotext lub biblioteka PHP Smalot\PdfParser).
  * Wymagane do rozpoznawania PESEL z treści PDF.
  *
@@ -350,8 +364,38 @@ function pit_init_plugin(): void {
 	load_plugin_textdomain( 'obsluga-dokumentow-ksiegowych', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 
 	add_action( 'template_redirect', 'pit_send_nocache_headers_for_panel_pages', 1 );
+	add_action( 'admin_init', 'pit_send_nocache_headers_admin_if_plugin_page', 1 );
+	add_action( 'admin_post_pit_upload_files', 'pit_send_nocache_headers_early', 1 );
+	add_action( 'admin_post_nopriv_pit_upload_files', 'pit_send_nocache_headers_early', 1 );
+	add_action( 'admin_post_pit_scan_uploaded_files', 'pit_send_nocache_headers_early', 1 );
+	add_action( 'admin_post_nopriv_pit_scan_uploaded_files', 'pit_send_nocache_headers_early', 1 );
 
 	pit_sync_files();
+}
+
+/**
+ * Wysyła nagłówki no-cache na żądaniach admin-post wtyczki (przed przekierowaniem).
+ */
+function pit_send_nocache_headers_early(): void {
+	if ( ! headers_sent() ) {
+		nocache_headers();
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
+	}
+}
+
+/**
+ * Wysyła nagłówki no-cache na stronie ustawień wtyczki (Narzędzia → Obsługa dokumentów księgowych).
+ */
+function pit_send_nocache_headers_admin_if_plugin_page(): void {
+	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+	if ( $screen && $screen->id === 'tools_page_obsluga-dokumentow-ksiegowych-settings' && ! headers_sent() ) {
+		nocache_headers();
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
+	}
 }
 
 /**
@@ -369,8 +413,22 @@ function pit_send_nocache_headers_for_panel_pages(): void {
 	if ( has_shortcode( $post->post_content, 'pit_accountant_panel' ) || has_shortcode( $post->post_content, 'pit_client_page' ) ) {
 		if ( ! headers_sent() ) {
 			nocache_headers();
+			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+			header( 'Pragma: no-cache' );
+			header( 'Expires: 0' );
+			header( 'X-Accel-Expires: 0' );
 		}
+		add_action( 'wp_head', 'pit_print_nocache_meta_tags', 1 );
 	}
+}
+
+/**
+ * Wypisuje meta tagi no-cache w <head> (wsparcie gdy serwer/CDN ignoruje nagłówki HTTP).
+ */
+function pit_print_nocache_meta_tags(): void {
+	echo '<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">' . "\n";
+	echo '<meta http-equiv="Pragma" content="no-cache">' . "\n";
+	echo '<meta http-equiv="Expires" content="0">' . "\n";
 }
 
 /**

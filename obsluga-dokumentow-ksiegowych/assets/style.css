@@ -499,6 +499,22 @@ pre.pit-upload-debug-log,
     border-color: #8a2324 !important;
 }
 
+/* Stały komunikat na dole panelu księgowego – cache */
+.pit-panel-footer-cache-notice {
+    margin-top: 24px;
+    padding: 14px 18px;
+    background: #f0f4f8;
+    border: 1px solid #c5d4e3;
+    border-radius: 6px;
+    color: #4a5f7a;
+}
+
+.pit-panel-footer-cache-notice p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
 /* Komunikaty – z przyciskiem zamknięcia */
 .pit-message {
     position: relative;
