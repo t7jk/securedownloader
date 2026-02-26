@@ -1,0 +1,326 @@
+# English translation for Obsługa dokumentów księgowych (fallback for untranslated locales)
+# Copyright (C) 2025
+# This file is distributed under the same license as the plugin.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Obsługa dokumentów księgowych 1.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-01-01 00:00+0000\n"
+"PO-Revision-Date: 2025-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: en\n"
+"Language: en_US\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Settings"
+msgstr "Settings"
+
+msgid "Przejdź"
+msgstr "Go"
+
+msgid "Musisz się zalogować. %s"
+msgstr "You must log in. %s"
+
+msgid "Zaloguj się"
+msgstr "Log in"
+
+msgid "Brak dostępu do tego panelu."
+msgstr "Access to this panel is denied."
+
+msgid "Wgrano %d dokumentów."
+msgstr "Uploaded %d document(s)."
+
+msgid "Pominięto %d (już istnieją)."
+msgstr "Skipped %d (already exist)."
+
+msgid "Błędów: %d."
+msgstr "Errors: %d."
+
+msgid "Dokument został usunięty."
+msgstr "Document has been deleted."
+
+msgid "Usunięto %d dokument."
+msgid_plural "Usunięto %d dokumentów."
+msgstr[0] "Deleted %d document."
+msgstr[1] "Deleted %d documents."
+
+msgid "Usunięto %d dokument z serwera i bazy."
+msgid_plural "Usunięto %d dokumentów z serwera i bazy."
+msgstr[0] "Deleted %d document from server and database."
+msgstr[1] "Deleted %d documents from server and database."
+
+msgid "Usunięto %d pobrany dokument z serwera."
+msgid_plural "Usunięto %d pobranych dokumentów z serwera."
+msgstr[0] "Deleted %d downloaded document from server."
+msgstr[1] "Deleted %d downloaded documents from server."
+
+msgid "PESEL został zapisany."
+msgstr "PESEL has been saved."
+
+msgid "Błąd: podaj prawidłowy PESEL (11 cyfr)."
+msgstr "Error: enter a valid PESEL (11 digits)."
+
+msgid "Dane firmy zostały zapisane."
+msgstr "Company details have been saved."
+
+msgid "Dodano %d plik do bazy."
+msgid_plural "Dodano %d plików do bazy."
+msgstr[0] "Added %d file to database."
+msgstr[1] "Added %d files to database."
+
+msgid "Usunięto %d rekord (brak pliku na dysku)."
+msgid_plural "Usunięto %d rekordów (brak pliku na dysku)."
+msgstr[0] "Removed %d record (file missing on disk)."
+msgstr[1] "Removed %d records (files missing on disk)."
+
+msgid "Skanowanie zakończone. Nie znaleziono nowych plików PDF na dysku."
+msgstr "Scan complete. No new PDF files found on disk."
+
+msgid "Panel księgowego 1.6"
+msgstr "Accountant panel 1.6"
+
+msgid "Nie zaimportowano następujących plików:"
+msgstr "The following files were not imported:"
+
+msgid "Tryb deweloperski: nie rozpoznano PESEL dla części osób"
+msgstr "Developer mode: PESEL not recognised for some persons"
+
+msgid "Poniższe informacje pomagają zdiagnozować problem na produkcji (gdy u Ciebie działa, a na serwerze klienta nie)."
+msgstr "The following information helps diagnose issues in production (when it works for you but not on the client's server)."
+
+msgid "Rozpoznawanie PESEL z PDF wymaga narzędzia pdftotext (pakiet poppler-utils). Na tym serwerze nie jest ono dostępne – zainstaluj je lub uzupełniaj PESEL ręcznie."
+msgstr "PESEL extraction from PDF requires pdftotext (poppler-utils). It is not available on this server – install it or enter PESEL manually."
+
+msgid "Alternatywa: wgraj wtyczkę wraz z folderem vendor/ (po uruchomieniu composer install w katalogu wtyczki) – wtedy PESEL będzie rozpoznawany z PDF bez pdftotext."
+msgstr "Alternatively: upload the plugin with the vendor/ folder (after running composer install in the plugin directory) – then PESEL will be extracted from PDF without pdftotext."
+
+msgid "Zakładki panelu"
+msgstr "Panel tabs"
+
+msgid "Dokumenty"
+msgstr "Documents"
+
+msgid "Wgrywanie"
+msgstr "Upload"
+
+msgid "Wzorce"
+msgstr "Patterns"
+
+msgid "Firma"
+msgstr "Company"
+
+msgid "Nazwisko i imię"
+msgstr "Last name and first name"
+
+msgid "PESEL"
+msgstr "PESEL"
+
+msgid "Rok"
+msgstr "Year"
+
+msgid "Data pobrania"
+msgstr "Download date"
+
+msgid "Brak dokumentów."
+msgstr "No documents."
+
+msgid "Nie dopasowano"
+msgstr "Not matched"
+
+msgid "11 cyfr"
+msgstr "11 digits"
+
+msgid "Zapisz"
+msgstr "Save"
+
+msgid "Nie pobrano"
+msgstr "Not downloaded"
+
+msgid "Usuń zaznaczone"
+msgstr "Delete selected"
+
+msgid "Czy na pewno usunąć wszystkie dokumenty z serwera i bazy? Tej operacji nie można cofnąć."
+msgstr "Are you sure you want to delete all documents from the server and database? This cannot be undone."
+
+msgid "Usuń wszystkie"
+msgstr "Delete all"
+
+msgid "Czy na pewno usunąć z serwera wszystkie pliki, które zostały już pobrane? Tej operacji nie można cofnąć."
+msgstr "Are you sure you want to delete from the server all files that have already been downloaded? This cannot be undone."
+
+msgid "Usuń pobrane"
+msgstr "Delete downloaded"
+
+msgid "Raport PDF – rok:"
+msgstr "PDF report – year:"
+
+msgid "Wszystkie lata"
+msgstr "All years"
+
+msgid "Generuj raport PDF"
+msgstr "Generate PDF report"
+
+msgid "Czy na pewno usunąć zaznaczone dokumenty?"
+msgstr "Are you sure you want to delete the selected documents?"
+
+msgid "Możesz wgrać 1 lub więcej dokumentów jednocześnie."
+msgstr "You can upload 1 or more documents at once."
+
+msgid "Limit PHP: max %1$s plików jednocześnie, łącznie do %2$s."
+msgstr "PHP limit: max %1$s files at once, total up to %2$s."
+
+msgid "Log rozpoznawania (Ctrl+A aby skopiować)"
+msgstr "Recognition log (Ctrl+A to copy)"
+
+msgid "Log rozpoznawania plików"
+msgstr "File recognition log"
+
+msgid "Wgrywanie zakończone. Skopiuj log (Ctrl+A), następnie kliknij Kontynuuj."
+msgstr "Upload complete. Copy the log (Ctrl+A), then click Continue."
+
+msgid "Kontynuuj"
+msgstr "Continue"
+
+msgid "Wgraj dokumenty"
+msgstr "Upload documents"
+
+msgid "Wyszukaj wgrane pliki"
+msgstr "Search uploaded files"
+
+msgid "Skanuje katalog uploadów na serwerze, dodaje do listy dokumentów znalezione pliki PDF (rozpoznanie jak przy wgrywaniu) i uzupełnia PESEL z treści PDF."
+msgstr "Scans the upload directory on the server, adds found PDF files to the document list (same recognition as on upload) and fills PESEL from PDF content."
+
+msgid "Wzorce stosowane przy imporcie do wyszukiwania danych (np. PESEL) w dokumentach. Strona – numer strony, Sekcja – np. sekcja formularza, Pole – etykieta pola."
+msgstr "Patterns used on import to find data (e.g. PESEL) in documents. Page – page number, Section – e.g. form section, Field – field label."
+
+msgid "Wzorce zapisane."
+msgstr "Patterns saved."
+
+msgid "Wzorce przywrócone do domyślnych."
+msgstr "Patterns restored to defaults."
+
+msgid "Szukam"
+msgstr "Search for"
+
+msgid "Strona"
+msgstr "Page"
+
+msgid "Sekcja"
+msgstr "Section"
+
+msgid "Pole"
+msgstr "Field"
+
+msgid "Nazwa pliku"
+msgstr "File name"
+
+msgid "Usuń wiersz"
+msgstr "Remove row"
+
+msgid "Usuń"
+msgstr "Remove"
+
+msgid "Dodaj wiersz"
+msgstr "Add row"
+
+msgid "Zapisz wzorce"
+msgstr "Save patterns"
+
+msgid "Czy na pewno przywrócić wszystkie domyślne wzorce? Obecna lista zostanie zastąpiona."
+msgstr "Are you sure you want to restore all default patterns? The current list will be replaced."
+
+msgid "Ustaw standardowe wartości"
+msgstr "Set default values"
+
+msgid "Nazwa firmy"
+msgstr "Company name"
+
+msgid "Adres firmy"
+msgstr "Company address"
+
+msgid "NIP firmy"
+msgstr "Company NIP"
+
+msgid "Zapisz zmiany"
+msgstr "Save changes"
+
+msgid "Po wgraniu dokumentów, mogą nie być widoczne, mimo odświeżania (CTRL+F5) z powodu cache na serwerze. Nie pozostaje nic innego jak czekać do kilku minut. Zmiana zwykle staje się widoczna po mniej niż minucie. Możesz użyć przycisku „Wyszukaj wgrane pliki”, aby ponownie przeskanować wgrane pliki. Ustawienia cache na serwerach mogą się różnić, czasy odświeżania mogą być zmienne."
+msgstr "After uploading, documents may not be visible despite refreshing (CTRL+F5) due to server cache. You may need to wait a few minutes. The change usually appears within a minute. You can use the \"Search uploaded files\" button to rescan. Cache settings vary by server; refresh times may vary."
+
+msgid "Brak uprawnień."
+msgstr "Insufficient permissions."
+
+msgid "Błąd bezpieczeństwa."
+msgstr "Security error."
+
+msgid "Nie wybrano dokumentów."
+msgstr "No documents selected."
+
+msgid "Błąd wgrywania pliku."
+msgstr "File upload error."
+
+msgid "Plik:"
+msgstr "File:"
+
+msgid "Wgrywanie pliku %1$s z %2$s"
+msgstr "Uploading file %1$s of %2$s"
+
+msgid "Czy na pewno usunąć ten dokument?"
+msgstr "Are you sure you want to delete this document?"
+
+msgid "PESEL musi składać się z 11 cyfr."
+msgstr "PESEL must consist of 11 digits."
+
+msgid "Zamknij"
+msgstr "Close"
+
+msgid "Dokumenty do pobrania"
+msgstr "Documents to download"
+
+msgid "Dokument"
+msgstr "Document"
+
+msgid "Pobierz"
+msgstr "Download"
+
+msgid "Możesz zamknąć bezpiecznie stronę."
+msgstr "You can safely close this page."
+
+msgid "Powrót do strony głównej"
+msgstr "Back to main page"
+
+msgid "NIP:"
+msgstr "NIP:"
+
+msgid "Wprowadź kod dostępu."
+msgstr "Enter access code."
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Nie znaleziono dokumentu. Sprawdź poprawność identyfikacji."
+msgstr "Document not found. Check your identification details."
+
+msgid "Brak użytkowników do wyświetlenia."
+msgstr "No users to display."
+
+msgid "Dodaj księgowych: wybierz jednego lub wielu (Ctrl+klik) z listy, następnie kliknij „Dodaj księgowego”."
+msgstr "Add accountants: select one or more (Ctrl+click) from the list, then click \"Add accountant\"."
+
+msgid "Lista księgowych"
+msgstr "Accountant list"
+
+msgid "Login"
+msgstr "Login"
+
+msgid "Przekierowywanie..."
+msgstr "Redirecting..."
+
+msgid "Kliknij tutaj"
+msgstr "Click here"
+
+msgid "Ustawienia zapisane."
+msgstr "Settings saved."
