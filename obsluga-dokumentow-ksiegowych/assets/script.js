@@ -27,48 +27,16 @@
             return;
         }
 
-        $form.find('#pit_first_name, #pit_last_name').on('input', function() {
-            var $el = $(this);
-            var v = $el.val();
-            if (v !== v.toUpperCase()) {
-                $el.val(v.toUpperCase());
-            }
-        });
-
         $form.on('submit', function(e) {
-            var hasError = false;
-            var errors = [];
-
             var pesel = $('#pit_pesel').val().trim();
-            var firstName = $('#pit_first_name').val().trim();
-            var lastName = $('#pit_last_name').val().trim();
 
             $('.pit-field-error').remove();
             $form.find('input, select').removeClass('pit-error-border');
 
             if (!/^\d{11}$/.test(pesel)) {
-                errors.push({ field: 'pit_pesel', message: pitManager.errorPesel });
-                hasError = true;
-            }
-
-            if (!firstName) {
-                errors.push({ field: 'pit_first_name', message: pitManager.errorFirstName || pitManager.errorName });
-                hasError = true;
-            }
-
-            if (!lastName) {
-                errors.push({ field: 'pit_last_name', message: pitManager.errorLastName || pitManager.errorName });
-                hasError = true;
-            }
-
-            if (hasError) {
                 e.preventDefault();
-
-                $.each(errors, function(i, error) {
-                    $('#' + error.field).addClass('pit-error-border');
-                    $('#' + error.field).after('<span class="pit-field-error" style="color:#dc3232;font-size:12px;margin-top:4px;display:block;">' + error.message + '</span>');
-                });
-
+                $('#pit_pesel').addClass('pit-error-border');
+                $('#pit_pesel').after('<span class="pit-field-error" style="color:#dc3232;font-size:12px;margin-top:4px;display:block;">' + (pitManager.errorPesel || '') + '</span>');
                 return false;
             }
 
