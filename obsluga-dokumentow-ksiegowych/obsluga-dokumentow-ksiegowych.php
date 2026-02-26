@@ -63,6 +63,9 @@ function pit_activate_plugin(): void {
     if ( get_option( 'pit_filename_filters' ) === false ) {
         add_option( 'pit_filename_filters', pit_get_default_filename_filters() );
     }
+    if ( get_option( 'pit_developer_mode' ) === false ) {
+        add_option( 'pit_developer_mode', 0 );
+    }
 
     // Zapisz wersję wtyczki (z nagłówka Plugin)
     update_option( 'pit_version', pit_plugin_version() );

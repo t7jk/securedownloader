@@ -23,6 +23,7 @@ class PIT_Admin {
         add_action( 'update_option_pit_accountant_users', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_accountant_page_url', [ $this, 'redirect_after_save' ] );
         add_action( 'update_option_pit_client_page_url', [ $this, 'redirect_after_save' ] );
+        add_action( 'update_option_pit_developer_mode', [ $this, 'notice_developer_mode_saved' ] );
         add_action( 'admin_post_pit_set_pesel', [ $this, 'handle_set_pesel' ] );
     }
 
@@ -75,6 +76,9 @@ class PIT_Admin {
         register_setting( 'pit_options_group', 'pit_filename_filters', [
             'sanitize_callback' => [ $this, 'sanitize_filename_filters' ],
         ] );
+        register_setting( 'pit_options_group', 'pit_developer_mode', [
+            'sanitize_callback' => function ( $v ) { return (int) ( $v === 1 || $v === '1' ); },
+        ] );
 
         add_settings_section(
             'pit_main_settings',
@@ -121,6 +125,25 @@ class PIT_Admin {
             ]
         );
 
+        add_settings_section(
+            'pit_developer_section',
+            __( 'Tryb deweloperski', 'obsluga-dokumentow-ksiegowych' ),
+            null,
+            'obsluga-dokumentow-ksiegowych-settings'
+        );
+        add_settings_field(
+            'pit_developer_mode',
+            __( 'Developer mode 01', 'obsluga-dokumentow-ksiegowych' ),
+            [ $this, 'render_field_checkbox' ],
+            'obsluga-dokumentow-ksiegowych-settings',
+            'pit_developer_section',
+            [
+                'name'             => 'pit_developer_mode',
+                'with_hidden_zero' => true,
+                'label'            => __( 'Włącz tryb deweloperski', 'obsluga-dokumentow-ksiegowych' ),
+                'description'      => __( 'Gdy włączony: przy wgrywaniu plików wyświetlane są szczegółowe komunikaty błędów (np. przy nierozpoznanym wzorcu nazwy pliku), ułatwiające diagnozę na produkcji.', 'obsluga-dokumentow-ksiegowych' ),
+            ]
+        );
     }
 
     public function sanitize_filename_filters( $input ): array {
@@ -549,6 +572,13 @@ class PIT_Admin {
                 </div>
             <?php endif; ?>
             
+            <?php if ( get_transient( 'pit_developer_mode_saved_notice' ) ) : ?>
+                <?php delete_transient( 'pit_developer_mode_saved_notice' ); ?>
+                <div class="notice notice-success is-dismissible">
+                    <p><?php esc_html_e( 'Zmiana trybu na developerski została zapisana.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                </div>
+            <?php endif; ?>
+
             <?php if ( isset( $_GET['pit_import_updated'] ) || isset( $_GET['pit_import_skipped'] ) ) : ?>
                 <div class="notice notice-success is-dismissible">
                     <p>
@@ -569,6 +599,7 @@ class PIT_Admin {
                 settings_fields( 'pit_options_group' );
                 echo '<input type="hidden" name="_wp_http_referer" value="' . esc_attr( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) ) . '">';
                 do_settings_sections( 'obsluga-dokumentow-ksiegowych-settings' );
+                submit_button( __( 'Zapisz zmiany', 'obsluga-dokumentow-ksiegowych' ) );
                 ?>
             </form>
         </div>
@@ -620,6 +651,13 @@ class PIT_Admin {
         add_action( 'admin_notices', function() {
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ustawienia zapisane.', 'obsluga-dokumentow-ksiegowych' ) . '</p></div>';
         } );
+    }
+
+    /**
+     * Po zapisaniu opcji pit_developer_mode ustawia transient, żeby na stronie ustawień pokazać komunikat.
+     */
+    public function notice_developer_mode_saved(): void {
+        set_transient( 'pit_developer_mode_saved_notice', 1, 30 );
     }
 
     /**
