@@ -648,54 +648,21 @@ class PIT_Accountant {
         }
         $db = PIT_Database::get_instance();
         set_time_limit( 90 );
-        $this->maybe_pack_zip_for_same_person_year( $db );
+        if ( function_exists( 'pit_raise_memory_for_pdf' ) ) {
+            pit_raise_memory_for_pdf();
+        }
         $this->fill_missing_pesel_after_upload( $db );
         $files = $db->get_all_files_sorted();
-
-        $files_count_diagnostic   = null;
-        $files_select_error       = '';
-        $show_upload_empty_notice = empty( $files ) && isset( $_GET['pit_uploaded'] ) && (int) $_GET['pit_uploaded'] > 0;
-        if ( $show_upload_empty_notice ) {
-            $files_select_error = $db->get_last_error();
-            if ( (int) get_option( 'pit_developer_mode', 0 ) === 1 ) {
-                $files_count_diagnostic = $db->get_files_count();
-            }
-        }
 
         ob_start();
 
         ?>
         <div class="pit-accountant-panel">
-            <h2><?php esc_html_e( 'Panel księgowego 3', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
+            <h2><?php esc_html_e( 'Panel księgowego 1.6', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
 
             <?php if ( $message ) : ?>
                 <div class="pit-message <?php echo esc_attr( $message_class ); ?>">
                     <?php echo esc_html( $message ); ?>
-                </div>
-            <?php endif; ?>
-            <?php if ( isset( $_GET['pit_uploaded'] ) && (int) $_GET['pit_uploaded'] > 0 ) : ?>
-                <div class="pit-message pit-info">
-                    <p><?php esc_html_e( 'Po wgraniu dokumentów naciśnij Ctrl+F5 (twarde odświeżenie), aby zobaczyć zaktualizowaną listę – cache może pokazywać starą wersję strony.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
-                </div>
-            <?php endif; ?>
-            <?php if ( $show_upload_empty_notice ) : ?>
-                <div class="pit-message pit-warning">
-                    <p><strong><?php esc_html_e( 'Lista dokumentów jest pusta mimo wgrania plików.', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
-                    <p><strong><?php esc_html_e( 'Wymagane: naciśnij Ctrl+F5 (lub Cmd+Shift+R na Macu), aby wymusić odświeżenie strony i pominąć cache. Zwykłe F5 może pokazywać starą, zapisaną w cache wersję.', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
-                    <?php if ( $files_select_error !== '' ) : ?>
-                        <p><?php esc_html_e( 'Błąd zapytania SQL:', 'obsluga-dokumentow-ksiegowych' ); ?> <code><?php echo esc_html( $files_select_error ); ?></code></p>
-                    <?php endif; ?>
-                    <?php if ( $files_count_diagnostic !== null ) : ?>
-                        <p><?php echo esc_html( sprintf( __( 'Liczba wierszy w tabeli plików: %d.', 'obsluga-dokumentow-ksiegowych' ), $files_count_diagnostic ) ); ?>
-                        <?php if ( $files_count_diagnostic > 0 ) : ?>
-                            <?php esc_html_e( 'Dane są w bazie – to niemal na pewno cache. Wciśnij Ctrl+F5 (twarde odświeżenie) lub wyczyść cache wtyczki/CDN.', 'obsluga-dokumentow-ksiegowych' ); ?>
-                        <?php else : ?>
-                            <?php esc_html_e( 'Tabela pusta – wstawianie mogło trafić do innej bazy (np. inny serwer w klastrze). Sprawdź konfigurację serwera.', 'obsluga-dokumentow-ksiegowych' ); ?>
-                        <?php endif; ?>
-                        </p>
-                    <?php elseif ( $files_select_error === '' ) : ?>
-                        <p><?php esc_html_e( 'Włącz Tryb deweloperski w Ustawieniach wtyczki (Narzędzia → Obsługa dokumentów księgowych), aby zobaczyć liczbę wierszy w tabeli i ustalić przyczynę.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
-                    <?php endif; ?>
                 </div>
             <?php endif; ?>
             <?php if ( ! empty( $upload_failed_list ) ) : ?>
@@ -1197,6 +1164,9 @@ class PIT_Accountant {
                     </div>
                 </form>
             </div>
+            <div class="pit-panel-footer-cache-notice">
+                <p><?php esc_html_e( 'Po wgraniu dokumentów, mogą nie być widoczne, mimo odświeżania (CTRL+F5) z powodu cache na serwerze. Nie pozostaje nic innego jak czekać do kilku minut. Zmiana zwykle staje się widoczna po mniej niż minucie. Możesz użyć przycisku „Wyszukaj wgrane pliki”, aby ponownie przeskanować wgrane pliki. Ustawienia cache na serwerach mogą się różnić, czasy odświeżania mogą być zmienne.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+            </div>
         </div>
         <?php
 
@@ -1241,6 +1211,9 @@ class PIT_Accountant {
         }
 
         set_time_limit( 120 );
+        if ( function_exists( 'pit_raise_memory_for_pdf' ) ) {
+            pit_raise_memory_for_pdf();
+        }
         pit_debug_log( 'handle_upload: after set_time_limit' );
 
         if ( function_exists( 'pit_create_upload_directory' ) ) {
@@ -1557,85 +1530,6 @@ class PIT_Accountant {
             && isset( $_POST['pit_upload_chunk_index'] )
             && isset( $_POST['pit_upload_total_chunks'] )
             && (int) $_POST['pit_upload_total_chunks'] >= 1;
-    }
-
-    /**
-     * Dla każdej pary (tax_year, full_name) z więcej niż jednym plikiem pakuje pliki do ZIP.
-     */
-    private function maybe_pack_zip_for_same_person_year( PIT_Database $db ): void {
-        global $wpdb;
-
-        $table = PIT_Database::$table_files;
-        $rows  = $wpdb->get_results(
-            "SELECT tax_year, full_name, COUNT(*) as cnt FROM {$table} GROUP BY tax_year, full_name HAVING cnt > 1",
-            ARRAY_A
-        );
-
-        if ( empty( $rows ) ) {
-            return;
-        }
-
-        $base_dir = pit_get_upload_dir();
-        $base_url = pit_get_upload_url();
-
-        foreach ( $rows as $row ) {
-            $tax_year  = (int) $row['tax_year'];
-            $full_name = $row['full_name'];
-            $files     = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT id, file_path, pesel FROM {$table} WHERE tax_year = %d AND full_name = %s ORDER BY id ASC",
-                    $tax_year,
-                    $full_name
-                )
-            );
-
-            $pdf_files = array_filter( $files, function ( $f ) {
-                return str_ends_with( strtolower( $f->file_path ), '.pdf' );
-            } );
-            if ( count( $pdf_files ) < 2 ) {
-                continue;
-            }
-
-            $zip_name = sanitize_file_name( $full_name . ' ' . $tax_year . '.zip' );
-            $zip_path = $base_dir . $tax_year . '/' . $zip_name;
-
-            if ( ! class_exists( 'ZipArchive' ) ) {
-                continue;
-            }
-
-            $zip = new ZipArchive();
-            if ( $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) !== true ) {
-                continue;
-            }
-
-            $first_pesel = '';
-            foreach ( $pdf_files as $file ) {
-                if ( file_exists( $file->file_path ) ) {
-                    $zip->addFile( $file->file_path, basename( $file->file_path ) );
-                }
-                if ( ! empty( $file->pesel ) ) {
-                    $first_pesel = $file->pesel;
-                }
-            }
-            $zip->close();
-
-            $zip_url = $base_url . $tax_year . '/' . $zip_name;
-
-            $db->insert_file( [
-                'full_name' => $full_name,
-                'pesel'     => $first_pesel,
-                'tax_year'  => $tax_year,
-                'file_path' => $zip_path,
-                'file_url'  => $zip_url,
-            ] );
-
-            foreach ( $pdf_files as $file ) {
-                if ( file_exists( $file->file_path ) ) {
-                    unlink( $file->file_path );
-                }
-                $db->delete_file( (int) $file->id );
-            }
-        }
     }
 
     /**
@@ -2036,6 +1930,9 @@ class PIT_Accountant {
         if ( ! file_exists( $file_path ) ) {
             return '';
         }
+        if ( function_exists( 'pit_raise_memory_for_pdf' ) ) {
+            pit_raise_memory_for_pdf();
+        }
 
         if ( class_exists( 'Smalot\PdfParser\Parser' ) ) {
             try {
@@ -2139,6 +2036,9 @@ class PIT_Accountant {
         }
 
         set_time_limit( 90 );
+        if ( function_exists( 'pit_raise_memory_for_pdf' ) ) {
+            pit_raise_memory_for_pdf();
+        }
         $db     = PIT_Database::get_instance();
         $result = $db->sync_files();
 
