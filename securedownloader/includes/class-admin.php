@@ -547,6 +547,33 @@ class PIT_Admin {
                 </p>
             <?php endif; ?>
 
+            <div class="sd-about-section" style="margin-top: 16px; margin-bottom: 24px; padding: 24px; border: 1px solid #c3c4c7; border-radius: 4px; background: #f6f7f7; max-width: 640px;">
+                <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 1.3em;"><?php esc_html_e( 'Informacje o autorze i produkcie', 'securedownloader' ); ?></h2>
+                <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+                    <div style="flex-shrink: 0;">
+                        <img src="<?php echo esc_url( PIT_PLUGIN_URL . 'assets/secure-downloader-card.png' ); ?>" alt="<?php esc_attr_e( 'Secure Downloader', 'securedownloader' ); ?>" style="max-width: 280px; height: auto; border-radius: 4px; display: block;">
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <p style="margin: 0 0 8px 0;"><strong><?php esc_html_e( 'Autor:', 'securedownloader' ); ?></strong> Tomasz Kalinowski</p>
+                        <p style="margin: 0 0 8px 0;">
+                            <strong>X / Twitter:</strong>
+                            <a href="https://x.com/tomas3man" target="_blank" rel="noopener noreferrer">@tomas3man</a>
+                        </p>
+                        <p style="margin: 0 0 8px 0;">
+                            <strong>Telegram:</strong>
+                            <a href="https://t.me/t7jka" target="_blank" rel="noopener noreferrer">@t7jka</a>
+                        </p>
+                        <p style="margin: 0 0 12px 0;">
+                            <strong><?php esc_html_e( 'Wersja wtyczki:', 'securedownloader' ); ?></strong>
+                            <?php echo esc_html( pit_plugin_version() ); ?>
+                        </p>
+                        <p style="margin: 0; color: #50575e; line-height: 1.5;">
+                            <?php esc_html_e( 'Wtyczka umożliwia menadżerom wgrywanie dokumentów, a klientom ich pobieranie po weryfikacji danych osobowych.', 'securedownloader' ); ?>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             <?php
             // Komunikaty po kliknięciu „Dodaj stronę” (menadżera / klienta)
             if ( isset( $_GET['page_created'] ) && $_GET['page_created'] === '1' ) :
