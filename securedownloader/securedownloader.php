@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: Secure Downloader
- * Plugin URI:  https://x.com/tomas3man
+ * Plugin URI:  https://wordpress.org/plugins/secure-downloader/
  * Description: Wtyczka umożliwia menadżerom wgrywanie dokumentów, a klientom ich pobieranie po weryfikacji danych osobowych.
  * Version:     1.1.0
  * Author:      Tomasz Kalinowski
- * Author URI:  https://x.com/tomas3man
+ * Author URI:  https://x.com/messages/compose?screen_name=tomas3man
  * Text Domain: securedownloader
  * Domain Path: /languages
  * License:     GPL-2.0+
