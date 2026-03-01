@@ -1,12 +1,12 @@
 <?php
 /**
- * Plugin Name: Obsługa dokumentów księgowych
- * Plugin URI:  https://example.com/obsluga-dokumentow-ksiegowych
- * Description: Wtyczka umożliwia księgowym wgrywanie dokumentów księgowych, a podatnikom ich pobieranie po weryfikacji danych osobowych.
+ * Plugin Name: Secure Downloader
+ * Plugin URI:  https://x.com/tomas3man
+ * Description: Wtyczka umożliwia menadżerom wgrywanie dokumentów, a klientom ich pobieranie po weryfikacji danych osobowych.
  * Version:     1.1.0
  * Author:      Tomasz Kalinowski
- * Author URI:  https://example.com
- * Text Domain: obsluga-dokumentow-ksiegowych
+ * Author URI:  https://x.com/tomas3man
+ * Text Domain: securedownloader
  * Domain Path: /languages
  * License:     GPL-2.0+
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -59,10 +59,10 @@ function pit_activate_plugin(): void {
         add_option( 'pit_accountant_users', [] );
     }
     if ( get_option( 'pit_accountant_page_url' ) === false ) {
-        add_option( 'pit_accountant_page_url', home_url( '/ksiegowy' ) );
+        add_option( 'pit_accountant_page_url', home_url( '/manager' ) );
     }
     if ( get_option( 'pit_client_page_url' ) === false ) {
-        add_option( 'pit_client_page_url', home_url( '/podatnik' ) );
+        add_option( 'pit_client_page_url', home_url( '/securedownloader' ) );
     }
     if ( get_option( 'pit_filename_filters' ) === false ) {
         add_option( 'pit_filename_filters', pit_get_default_filename_filters() );
@@ -274,7 +274,7 @@ function pit_redirect_safe( string $url ): void {
     echo '<!DOCTYPE html><html><head><meta charset="UTF-8">';
     echo '<meta http-equiv="Refresh" content="0; url=' . esc_attr( $url ) . '">';
     echo '<script>location.replace(' . wp_json_encode( $url ) . ');</script>';
-    echo '</head><body><p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Przejdź', 'obsluga-dokumentow-ksiegowych' ) . '</a></p></body></html>';
+    echo '</head><body><p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Przejdź', 'securedownloader' ) . '</a></p></body></html>';
     exit;
 }
 
@@ -353,17 +353,41 @@ register_activation_hook( __FILE__, 'pit_activate_plugin' );
 register_deactivation_hook( __FILE__, 'pit_deactivate_plugin' );
 
 /**
+ * Aktualizuje zapisane adresy stron ze starych slugów na nowe (ksiegowy/menadzer→manager, podatnik→securedownloader).
+ * Dzięki temu w Ustawieniach widać już nowe URL-e bez ręcznej edycji.
+ */
+function pit_migrate_saved_page_urls_to_new_slugs(): void {
+	$accountant_url = get_option( 'pit_accountant_page_url', '' );
+	if ( is_string( $accountant_url ) && $accountant_url !== '' ) {
+		$new_url = str_replace( [ 'ksiegowy/', '/ksiegowy', 'ksiegowy' ], [ 'manager/', '/manager', 'manager' ], $accountant_url );
+		$new_url = str_replace( [ 'menadzer/', '/menadzer', 'menadzer' ], [ 'manager/', '/manager', 'manager' ], $new_url );
+		if ( $new_url !== $accountant_url ) {
+			update_option( 'pit_accountant_page_url', $new_url );
+		}
+	}
+	$client_url = get_option( 'pit_client_page_url', '' );
+	if ( is_string( $client_url ) && $client_url !== '' && strpos( $client_url, 'podatnik' ) !== false ) {
+		$new_url = str_replace( [ 'podatnik/', '/podatnik', 'podatnik' ], [ 'securedownloader/', '/securedownloader', 'securedownloader' ], $client_url );
+		update_option( 'pit_client_page_url', $new_url );
+	}
+}
+
+/**
  * Inicjalizacja klas wtyczki po załadowaniu wszystkich wtyczek WordPress.
  */
 function pit_init_plugin(): void {
+	pit_migrate_saved_page_urls_to_new_slugs();
+
 	PIT_Database::get_instance();
 	PIT_Admin::get_instance();
 	PIT_Accountant::get_instance();
 	PIT_Client::get_instance();
 
-	load_plugin_textdomain( 'obsluga-dokumentow-ksiegowych', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+	load_plugin_textdomain( 'securedownloader', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 	add_filter( 'load_textdomain_mofile', 'pit_load_english_fallback_for_unknown_locales', 10, 2 );
 
+	add_action( 'template_redirect', 'pit_redirect_old_ksiegowy_to_menadzer', 0 );
+	add_action( 'template_redirect', 'pit_redirect_old_podatnik_to_securedownloader', 0 );
 	add_action( 'template_redirect', 'pit_send_nocache_headers_for_panel_pages', 1 );
 	add_action( 'admin_init', 'pit_send_nocache_headers_admin_if_plugin_page', 1 );
 	add_action( 'admin_post_pit_upload_files', 'pit_send_nocache_headers_early', 1 );
@@ -383,7 +407,7 @@ function pit_init_plugin(): void {
  * @return string Ścieżka do .mo (oryginalna lub en_US).
  */
 function pit_load_english_fallback_for_unknown_locales( string $mofile, string $domain ): string {
-	if ( $domain !== 'obsluga-dokumentow-ksiegowych' ) {
+	if ( $domain !== 'securedownloader' ) {
 		return $mofile;
 	}
 	$locale = get_locale();
@@ -397,8 +421,48 @@ function pit_load_english_fallback_for_unknown_locales( string $mofile, string $
 	if ( $locale === 'pl_PL' ) {
 		return $mofile;
 	}
-	$en_mo = PIT_PLUGIN_DIR . 'languages/obsluga-dokumentow-ksiegowych-en_US.mo';
+	$en_mo = PIT_PLUGIN_DIR . 'languages/securedownloader-en_US.mo';
 	return file_exists( $en_mo ) ? $en_mo : $mofile;
+}
+
+/**
+ * Przekierowuje starą ścieżkę …/ksiegowy/ lub …/menadzer/ na …/manager (np. index.php/ksiegowy/ → index.php/manager).
+ */
+function pit_redirect_old_ksiegowy_to_menadzer(): void {
+	$uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+	if ( $uri === '' ) {
+		return;
+	}
+	$new_uri = $uri;
+	$new_uri = str_replace( [ 'ksiegowy/', '/ksiegowy', 'ksiegowy' ], [ 'manager/', '/manager', 'manager' ], $new_uri );
+	$new_uri = str_replace( [ 'menadzer/', '/menadzer', 'menadzer' ], [ 'manager/', '/manager', 'manager' ], $new_uri );
+	if ( $new_uri === $uri ) {
+		return;
+	}
+	$redirect = ( is_ssl() ? 'https://' : 'http://' ) . ( $_SERVER['HTTP_HOST'] ?? '' ) . $new_uri;
+	if ( ! headers_sent() ) {
+		wp_safe_redirect( $redirect, 301 );
+		exit;
+	}
+}
+
+/**
+ * Przekierowuje starą ścieżkę …/podatnik/ na …/securedownloader (np. index.php/podatnik/ → index.php/securedownloader).
+ */
+function pit_redirect_old_podatnik_to_securedownloader(): void {
+	$uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+	if ( $uri === '' || strpos( $uri, 'podatnik' ) === false ) {
+		return;
+	}
+	$new_uri = str_replace( [ 'podatnik/', '/podatnik', 'podatnik' ], [ 'securedownloader/', '/securedownloader', 'securedownloader' ], $uri );
+	if ( $new_uri === $uri ) {
+		return;
+	}
+	$redirect = ( is_ssl() ? 'https://' : 'http://' ) . ( $_SERVER['HTTP_HOST'] ?? '' ) . $new_uri;
+	if ( ! headers_sent() ) {
+		wp_safe_redirect( $redirect, 301 );
+		exit;
+	}
 }
 
 /**
@@ -414,11 +478,11 @@ function pit_send_nocache_headers_early(): void {
 }
 
 /**
- * Wysyła nagłówki no-cache na stronie ustawień wtyczki (Narzędzia → Obsługa dokumentów księgowych).
+ * Wysyła nagłówki no-cache na stronie ustawień wtyczki (Narzędzia → Secure Downloader).
  */
 function pit_send_nocache_headers_admin_if_plugin_page(): void {
 	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-	if ( $screen && $screen->id === 'tools_page_obsluga-dokumentow-ksiegowych-settings' && ! headers_sent() ) {
+	if ( $screen && $screen->id === 'tools_page_securedownloader-settings' && ! headers_sent() ) {
 		nocache_headers();
 		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 		header( 'Pragma: no-cache' );
@@ -427,7 +491,7 @@ function pit_send_nocache_headers_admin_if_plugin_page(): void {
 }
 
 /**
- * Wysyła nagłówki no-cache na stronach z panelem księgowego i podatnika.
+ * Wysyła nagłówki no-cache na stronach z panelem menadżera i klienta.
  * Ogranicza problem opóźnionego widoku zmian przy cache (pełnostronicowy, CDN, serwer).
  */
 function pit_send_nocache_headers_for_panel_pages(): void {
@@ -474,8 +538,8 @@ add_action( 'plugins_loaded', 'pit_init_plugin' );
 function pit_plugin_action_links( array $links ): array {
     $settings_link = sprintf(
         '<a href="%s">%s</a>',
-        esc_url( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) ),
-        esc_html__( 'Settings', 'obsluga-dokumentow-ksiegowych' )
+        esc_url( admin_url( 'admin.php?page=securedownloader-settings' ) ),
+        esc_html__( 'Settings', 'securedownloader' )
     );
     array_unshift( $links, $settings_link );
     return $links;

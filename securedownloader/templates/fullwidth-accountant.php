@@ -1,9 +1,9 @@
 <?php
 /**
- * Szablon pełnoekranowy strony księgowego (bez nagłówka, stopki i boku motywu).
- * Używany, gdy w ustawieniach włączono "Strona księgowego w pełnym ekranie".
+ * Szablon pełnoekranowy strony menadżera (bez nagłówka, stopki i boku motywu).
+ * Używany, gdy w ustawieniach włączono "Strona menadżera w pełnym ekranie".
  *
- * @package Obsluga_dokumentow_ksiegowych
+ * @package Securedownloader
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

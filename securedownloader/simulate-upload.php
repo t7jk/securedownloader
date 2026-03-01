@@ -2,7 +2,7 @@
 /**
  * Symulacja wczytania plików – parsowanie nazw przy domyślnych filtrach.
  * Uruchomienie: php simulate-upload.php [ścieżka/do/wp-load.php]
- * Bez argumentu: szuka wp-load.php w ../../../../ (zakładając skrypt w plugins/obsluga-dokumentow-ksiegowych/).
+ * Bez argumentu: szuka wp-load.php w ../../../../ (zakładając skrypt w plugins/securedownloader/).
  */
 if ( php_sapi_name() !== 'cli' ) {
     exit( 'Skrypt tylko w trybie CLI.' );

@@ -2,8 +2,8 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * Klasa strony podatnika wtyczki PIT-11 Manager.
- * Umożliwia podatnikom pobieranie PIT-11 po weryfikacji danych.
+ * Klasa strony klienta wtyczki PIT-11 Manager.
+ * Umożliwia klientom pobieranie PIT-11 po weryfikacji danych.
  */
 class PIT_Client {
 
@@ -42,7 +42,7 @@ class PIT_Client {
     }
 
     /**
-     * Dla strony podatnika zwraca szablon pełnoekranowy (bez motywu).
+     * Dla strony klienta zwraca szablon pełnoekranowy (bez motywu).
      *
      * @param string $template Ścieżka do aktualnego szablonu.
      * @return string Ścieżka do szablonu.
@@ -71,30 +71,30 @@ class PIT_Client {
 
         if ( $post && has_shortcode( $post->post_content, 'pit_client_page' ) ) {
             wp_enqueue_style(
-                'obsluga-dokumentow-ksiegowych-style',
+                'securedownloader-style',
                 PIT_PLUGIN_URL . 'assets/style.css',
                 [],
                 pit_plugin_version()
             );
 
             wp_enqueue_script(
-                'obsluga-dokumentow-ksiegowych-script',
+                'securedownloader-script',
                 PIT_PLUGIN_URL . 'assets/script.js',
                 [ 'jquery' ],
                 pit_plugin_version(),
                 true
             );
 
-            wp_localize_script( 'obsluga-dokumentow-ksiegowych-script', 'pitManager', [
+            wp_localize_script( 'securedownloader-script', 'pitManager', [
                 'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
                 'nonce'      => wp_create_nonce( 'pit_manager_nonce' ),
-                'errorPesel' => __( 'PESEL musi składać się z 11 cyfr.', 'obsluga-dokumentow-ksiegowych' ),
+                'errorPesel' => __( 'PESEL musi składać się z 11 cyfr.', 'securedownloader' ),
             ] );
         }
     }
 
     /**
-     * Renderuje shortcode strony podatnika.
+     * Renderuje shortcode strony klienta.
      *
      * @return string HTML strony.
      */
@@ -110,7 +110,7 @@ class PIT_Client {
         $files_list = [];
 
         if ( isset( $_GET['pit_error'] ) ) {
-            $error = __( 'Nie znaleziono dokumentu. Sprawdź poprawność identyfikacji.', 'obsluga-dokumentow-ksiegowych' );
+            $error = __( 'Nie znaleziono dokumentu. Sprawdź poprawność identyfikacji.', 'securedownloader' );
         }
 
         $show_files_key = isset( $_GET['pit_show_files'] ) && isset( $_GET['pit_key'] )
@@ -133,14 +133,14 @@ class PIT_Client {
                 .pit-client-files-screen a.pit-download-one-btn { background: #c00 !important; background-color: #c00 !important; color: #fff !important; border: 1px solid #a00 !important; text-decoration: none !important; }
                 .pit-client-files-screen a.pit-download-one-btn:hover { background: #a00 !important; background-color: #a00 !important; color: #fff !important; }
             </style>
-            <h2><?php esc_html_e( 'Dokumenty do pobrania', 'obsluga-dokumentow-ksiegowych' ); ?></h2>
+            <h2><?php esc_html_e( 'Dokumenty do pobrania', 'securedownloader' ); ?></h2>
 
             <div class="pit-files-list">
                 <ul class="pit-files-list-items">
                     <?php foreach ( $files_list as $item ) : ?>
                         <?php
                         $file_id   = (int) ( $item['id'] ?? 0 );
-                        $file_name = ! empty( $item['name'] ) ? $item['name'] : __( 'Dokument', 'obsluga-dokumentow-ksiegowych' );
+                        $file_name = ! empty( $item['name'] ) ? $item['name'] : __( 'Dokument', 'securedownloader' );
                         $download_url = add_query_arg(
                             [
                                 'pit_download' => $file_id,
@@ -152,16 +152,16 @@ class PIT_Client {
                         <li class="pit-files-list-item">
                             <span class="pit-files-list-name"><?php echo esc_html( $file_name ); ?></span>
                             <a href="<?php echo esc_url( $download_url ); ?>" class="button pit-download-one-btn">
-                                <?php esc_html_e( 'Pobierz', 'obsluga-dokumentow-ksiegowych' ); ?>
+                                <?php esc_html_e( 'Pobierz', 'securedownloader' ); ?>
                             </a>
                         </li>
                     <?php endforeach; ?>
                 </ul>
             </div>
 
-            <p class="pit-files-screen-note"><?php esc_html_e( 'Możesz zamknąć bezpiecznie stronę.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+            <p class="pit-files-screen-note"><?php esc_html_e( 'Możesz zamknąć bezpiecznie stronę.', 'securedownloader' ); ?></p>
             <p class="pit-files-screen-actions">
-                <a href="<?php echo esc_url( remove_query_arg( [ 'pit_show_files', 'pit_key' ], get_permalink() ) ); ?>" class="button pit-back-home-btn"><?php esc_html_e( 'Powrót do strony głównej', 'obsluga-dokumentow-ksiegowych' ); ?></a>
+                <a href="<?php echo esc_url( remove_query_arg( [ 'pit_show_files', 'pit_key' ], get_permalink() ) ); ?>" class="button pit-back-home-btn"><?php esc_html_e( 'Powrót do strony głównej', 'securedownloader' ); ?></a>
             </p>
         </div>
         <?php
@@ -179,7 +179,7 @@ class PIT_Client {
                         <p><?php echo esc_html( $company_address ); ?></p>
                     <?php endif; ?>
                     <?php if ( $company_nip ) : ?>
-                        <p><?php esc_html_e( 'NIP:', 'obsluga-dokumentow-ksiegowych' ); ?> <?php echo esc_html( $company_nip ); ?></p>
+                        <p><?php esc_html_e( 'NIP:', 'securedownloader' ); ?> <?php echo esc_html( $company_nip ); ?></p>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -199,13 +199,13 @@ class PIT_Client {
                            id="pit_pesel" 
                            pattern="[0-9]{11}" 
                            maxlength="11" 
-                           placeholder="<?php esc_attr_e( 'Wprowadź kod dostępu.', 'obsluga-dokumentow-ksiegowych' ); ?>"
+                           placeholder="<?php esc_attr_e( 'Wprowadź kod dostępu.', 'securedownloader' ); ?>"
                            required>
                 </div>
                 
                 <div class="pit-form-row">
                     <button type="submit" class="button button-primary pit-submit-btn">
-                        <?php esc_html_e( 'OK', 'obsluga-dokumentow-ksiegowych' ); ?>
+                        <?php esc_html_e( 'OK', 'securedownloader' ); ?>
                     </button>
                 </div>
             </form>
@@ -217,7 +217,7 @@ class PIT_Client {
     }
 
     /**
-     * Przekierowuje na stronę podatnika z komunikatem błędu.
+     * Przekierowuje na stronę klienta z komunikatem błędu.
      */
     private function redirect_client_error(): void {
         $url = wp_get_referer();

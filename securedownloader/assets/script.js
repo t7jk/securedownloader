@@ -242,7 +242,7 @@
         var $panel = $('.pit-accountant-panel');
         if ($panel.length === 0) return;
 
-        var validTabs = ['lista', 'upload', 'wzorce', 'dane-firmy'];
+        var validTabs = ['lista', 'upload', 'wzorce', 'dane-firmy', 'manual'];
 
         function switchToTab(tabId) {
             if (!tabId || validTabs.indexOf(tabId) === -1) return;
