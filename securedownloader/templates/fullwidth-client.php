@@ -1,8 +1,8 @@
 <?php
 /**
- * Szablon pełnoekranowy strony podatnika (bez nagłówka, stopki i boku motywu).
+ * Szablon pełnoekranowy strony klienta (bez nagłówka, stopki i boku motywu).
  *
- * @package Obsluga_dokumentow_ksiegowych
+ * @package Securedownloader
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

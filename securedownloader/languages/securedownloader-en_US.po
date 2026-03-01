@@ -1,10 +1,10 @@
-# English translation for Obsługa dokumentów księgowych (fallback for untranslated locales)
+# English translation for Secure Downloader (fallback for untranslated locales)
 # Copyright (C) 2025
 # This file is distributed under the same license as the plugin.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Obsługa dokumentów księgowych 1.1.0\n"
+"Project-Id-Version: Secure Downloader 1.1.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-01-01 00:00+0000\n"
 "PO-Revision-Date: 2025-01-01 00:00+0000\n"
@@ -79,8 +79,8 @@ msgstr[1] "Removed %d records (files missing on disk)."
 msgid "Skanowanie zakończone. Nie znaleziono nowych plików PDF na dysku."
 msgstr "Scan complete. No new PDF files found on disk."
 
-msgid "Panel księgowego 1.6"
-msgstr "Accountant panel 1.6"
+msgid "Panel menadżera 1.7"
+msgstr "Manager panel 1.7"
 
 msgid "Nie zaimportowano następujących plików:"
 msgstr "The following files were not imported:"
@@ -307,11 +307,11 @@ msgstr "Document not found. Check your identification details."
 msgid "Brak użytkowników do wyświetlenia."
 msgstr "No users to display."
 
-msgid "Dodaj księgowych: wybierz jednego lub wielu (Ctrl+klik) z listy, następnie kliknij „Dodaj księgowego”."
-msgstr "Add accountants: select one or more (Ctrl+click) from the list, then click \"Add accountant\"."
+msgid "Dodaj menadżerów: wybierz jednego lub wielu (Ctrl+klik) z listy, następnie kliknij „Dodaj menadżera”."
+msgstr "Add managers: select one or more (Ctrl+click) from the list, then click \"Add manager\"."
 
-msgid "Lista księgowych"
-msgstr "Accountant list"
+msgid "Lista menadżerów"
+msgstr "Managers list"
 
 msgid "Login"
 msgstr "Login"
@@ -324,3 +324,48 @@ msgstr "Click here"
 
 msgid "Ustawienia zapisane."
 msgstr "Settings saved."
+
+msgid "Klient"
+msgstr "Client"
+
+msgid "Adres strony dla klienta"
+msgstr "Client page URL"
+
+msgid "Utwórz podstronę [/securedownloader] z kodem [pit_client_page] dla Klienta"
+msgstr "Create a subpage [/securedownloader] with shortcode [pit_client_page] for Client"
+
+msgid "Brak skonfigurowanej strony klienta. Utwórz podstronę [/securedownloader] z kodem [pit_client_page] i wpisz jej URL powyżej."
+msgstr "No client page configured. Create a subpage [/securedownloader] with shortcode [pit_client_page] and enter its URL above."
+
+msgid "Strona klienta nie zawiera shortcode [pit_client_page]. Dodaj go do treści strony."
+msgstr "The client page does not contain shortcode [pit_client_page]. Add it to the page content."
+
+msgid "Podręcznik"
+msgstr "User Manual"
+
+msgid "Podręcznik użytkownika"
+msgstr "User manual"
+
+msgid "Podręcznik użytkownika (User Manual)"
+msgstr "User Manual"
+
+msgid "Pełna instrukcja w panelu menadżera w zakładce „Podręcznik”."
+msgstr "Full instructions are in the manager panel under the \"User Manual\" tab."
+
+msgid "Polski"
+msgstr "Polish"
+
+msgid "Do czego służy wtyczka"
+msgstr "What the plugin does"
+
+msgid "Zakładka Dokumenty"
+msgstr "Documents tab"
+
+msgid "Zakładka Wgrywanie"
+msgstr "Upload tab"
+
+msgid "Zakładka Wzorce"
+msgstr "Patterns tab"
+
+msgid "Zakładka Firma"
+msgstr "Company tab"

@@ -1,6 +1,6 @@
 <?php return array(
     'root' => array(
-        'name' => 'obsluga-dokumentow-ksiegowych/plugin',
+        'name' => 'securedownloader/plugin',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
         'reference' => 'dd127c423907827c653933598d572b1cfef69478',
@@ -10,7 +10,7 @@
         'dev' => false,
     ),
     'versions' => array(
-        'obsluga-dokumentow-ksiegowych/plugin' => array(
+        'securedownloader/plugin' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
             'reference' => 'dd127c423907827c653933598d572b1cfef69478',

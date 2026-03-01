@@ -1,17 +1,17 @@
 <?php
 /**
- * Plugin Name: Obsługa dokumentów księgowych
- * Plugin URI:  https://example.com/obsluga-dokumentow-ksiegowych
- * Description: Wtyczka umożliwia księgowym wgrywanie dokumentów księgowych, a podatnikom ich pobieranie po weryfikacji danych osobowych.
+ * Plugin Name: Secure Downloader
+ * Plugin URI:  https://example.com/securedownloader
+ * Description: Wtyczka umożliwia menadżerom wgrywanie dokumentów, a klientom ich pobieranie po weryfikacji danych osobowych.
  * Version:     1.0.0
  * Author:      Tomasz Kalinowski
  * Author URI:  https://example.com
- * Text Domain: obsluga-dokumentow-ksiegowych
+ * Text Domain: securedownloader
  * Domain Path: /languages
  * License:     GPL-2.0+
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  *
- * Loader: ładuje właściwą wtyczkę z podkatalogu obsluga-dokumentow-ksiegowych/.
+ * Loader: ładuje właściwą wtyczkę z podkatalogu securedownloader/.
  * Zainstaluj cały folder (np. PIT-downloader) w wp-content/plugins/ i aktywuj ten plik.
  */
 
@@ -19,13 +19,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$obsluga_pit_file = dirname( __FILE__ ) . '/obsluga-dokumentow-ksiegowych/obsluga-dokumentow-ksiegowych.php';
+$securedownloader_main_file = dirname( __FILE__ ) . '/securedownloader/securedownloader.php';
 
-if ( ! file_exists( $obsluga_pit_file ) ) {
+if ( ! file_exists( $securedownloader_main_file ) ) {
 	return;
 }
 
-require_once $obsluga_pit_file;
+require_once $securedownloader_main_file;
 
 register_activation_hook( __FILE__, 'pit_activate_plugin' );
 register_deactivation_hook( __FILE__, 'pit_deactivate_plugin' );
@@ -36,8 +36,8 @@ register_deactivation_hook( __FILE__, 'pit_deactivate_plugin' );
 function pit_loader_plugin_action_links( array $links ): array {
 	$settings_link = sprintf(
 		'<a href="%s">%s</a>',
-		esc_url( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) ),
-		esc_html__( 'Settings', 'obsluga-dokumentow-ksiegowych' )
+		esc_url( admin_url( 'admin.php?page=securedownloader-settings' ) ),
+		esc_html__( 'Settings', 'securedownloader' )
 	);
 	array_unshift( $links, $settings_link );
 	return $links;

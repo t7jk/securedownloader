@@ -43,10 +43,10 @@ class PIT_Admin {
     public function register_menu(): void {
         add_submenu_page(
             'tools.php',
-            __( 'Obsługa dokumentów księgowych', 'obsluga-dokumentow-ksiegowych' ),
-            __( 'Obsługa dokumentów księgowych', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Secure Downloader', 'securedownloader' ),
+            __( 'Secure Downloader', 'securedownloader' ),
             'manage_options',
-            'obsluga-dokumentow-ksiegowych-settings',
+            'securedownloader-settings',
             [ $this, 'render_settings' ]
         );
     }
@@ -81,67 +81,71 @@ class PIT_Admin {
         ] );
 
         add_settings_section(
-            'pit_main_settings',
-            '',
-            null,
-            'obsluga-dokumentow-ksiegowych-settings'
+            'pit_pages_section',
+            __( 'Adresy stron', 'securedownloader' ),
+            [ $this, 'render_section_pages_desc' ],
+            'securedownloader-settings'
         );
-
         add_settings_field(
             'pit_accountant_page_url',
-            __( 'Adres strony dla księgowego', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Adres strony dla menadżera', 'securedownloader' ),
             [ $this, 'render_field_url' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [ 
+            'securedownloader-settings',
+            'pit_pages_section',
+            [
                 'name'        => 'pit_accountant_page_url',
                 'shortcode'   => 'pit_accountant_panel',
-                'description' => __( 'Utwórz podstronę [/ksiegowy] z kodem [pit_accountant_panel] dla Księgowego', 'obsluga-dokumentow-ksiegowych' )
+                'description' => __( 'Pełny URL strony z panelem menadżera (np. …/manager). Na tej stronie musi być shortcode [pit_accountant_panel]. Umożliwia menadżerom wgrywanie dokumentów i zarządzanie nimi. Przycisk „Dodaj” tworzy stronę z tym shortcode, „Otwórz” – otwiera stronę w nowej karcie.', 'securedownloader' ),
             ]
         );
-
         add_settings_field(
             'pit_client_page_url',
-            __( 'Adres strony dla podatnika', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Adres strony dla klienta', 'securedownloader' ),
             [ $this, 'render_field_url' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [ 
+            'securedownloader-settings',
+            'pit_pages_section',
+            [
                 'name'        => 'pit_client_page_url',
                 'shortcode'   => 'pit_client_page',
-                'description' => __( 'Utwórz podstronę [/podatnik] z kodem [pit_client_page] dla Podatnika', 'obsluga-dokumentow-ksiegowych' )
+                'description' => __( 'Pełny URL strony, na której klienci pobierają dokumenty (np. …/securedownloader). Na stronie musi być shortcode [pit_client_page]. Klient podaje PESEL, imię i nazwisko, po weryfikacji widzi listę swoich dokumentów i może je pobrać. „Dodaj” tworzy stronę z shortcode, „Otwórz” – otwiera w nowej karcie.', 'securedownloader' ),
             ]
         );
 
+        add_settings_section(
+            'pit_managers_section',
+            __( 'Kto jest menadżerem', 'securedownloader' ),
+            [ $this, 'render_section_managers_desc' ],
+            'securedownloader-settings'
+        );
         add_settings_field(
             'pit_accountant_users',
-            __( 'Kto jest księgowym', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Lista menadżerów', 'securedownloader' ),
             [ $this, 'render_field_users' ],
-            'obsluga-dokumentow-ksiegowych-settings',
-            'pit_main_settings',
-            [ 
+            'securedownloader-settings',
+            'pit_managers_section',
+            [
                 'name'        => 'pit_accountant_users',
-                'description' => __( 'Wybierz użytkownika i kliknij "Dodaj księgowego", aby dodać go do listy księgowych.', 'obsluga-dokumentow-ksiegowych' )
+                'description' => __( 'Użytkownicy z tej listy mają dostęp do panelu menadżera (adres z pola powyżej). Wybierz użytkownika z listy (Ctrl+klik dla wielu) i kliknij „Dodaj menadżera”. Usuń – usuwa z listy menadżerów (nie usuwa konta WordPress).', 'securedownloader' ),
             ]
         );
 
         add_settings_section(
             'pit_developer_section',
-            __( 'Tryb deweloperski', 'obsluga-dokumentow-ksiegowych' ),
-            null,
-            'obsluga-dokumentow-ksiegowych-settings'
+            __( 'Tryb deweloperski', 'securedownloader' ),
+            [ $this, 'render_section_developer_desc' ],
+            'securedownloader-settings'
         );
         add_settings_field(
             'pit_developer_mode',
-            __( 'Developer mode', 'obsluga-dokumentow-ksiegowych' ),
+            __( 'Włącz tryb deweloperski', 'securedownloader' ),
             [ $this, 'render_field_checkbox' ],
-            'obsluga-dokumentow-ksiegowych-settings',
+            'securedownloader-settings',
             'pit_developer_section',
             [
                 'name'             => 'pit_developer_mode',
                 'with_hidden_zero' => true,
-                'label'            => __( 'Włącz tryb deweloperski', 'obsluga-dokumentow-ksiegowych' ),
-                'description'      => __( 'Gdy włączony: przy wgrywaniu plików wyświetlane są szczegółowe komunikaty błędów (np. przy nierozpoznanym wzorcu nazwy pliku), ułatwiające diagnozę na produkcji.', 'obsluga-dokumentow-ksiegowych' ),
+                'label'            => __( 'Włącz tryb deweloperski', 'securedownloader' ),
+                'description'      => __( 'Gdy włączony: przy wgrywaniu plików w panelu menadżera wyświetlany jest szczegółowy log (dlaczego nie rozpoznano PESEL, które wzorce pasują itd.). Przydatne do diagnozy na serwerze klienta. Na produkcji można wyłączyć.', 'securedownloader' ),
             ]
         );
     }
@@ -163,6 +167,18 @@ class PIT_Admin {
             }
         }
         return array_values( $out );
+    }
+
+    public function render_section_pages_desc( array $args ): void {
+        echo '<p class="description">' . esc_html__( 'Określ adresy stron WordPress, na których wyświetlany jest panel menadżera i strona pobierania dla klienta. Strony muszą zawierać odpowiednie shortcode’y.', 'securedownloader' ) . '</p>';
+    }
+
+    public function render_section_managers_desc( array $args ): void {
+        echo '<p class="description">' . esc_html__( 'Wybierz konta WordPress (użytkowników), które mają mieć dostęp do panelu menadżera – wgrywanie dokumentów, wzorce, dane firmy.', 'securedownloader' ) . '</p>';
+    }
+
+    public function render_section_developer_desc( array $args ): void {
+        echo '<p class="description">' . esc_html__( 'Opcje pomocne przy wdrażaniu i diagnozowaniu problemów z rozpoznawaniem plików i PESEL.', 'securedownloader' ) . '</p>';
     }
 
     public function render_field_text( array $args ): void {
@@ -193,13 +209,13 @@ class PIT_Admin {
                 printf(
                     ' <a href="%s" class="button button-small">%s</a>',
                     esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=pit_create_page&option_name=' . $name ), 'pit_create_page_' . $name ) ),
-                    esc_html__( 'Dodaj', 'obsluga-dokumentow-ksiegowych' )
+                    esc_html__( 'Dodaj', 'securedownloader' )
                 );
             }
             printf(
                 ' <a href="%s" target="_blank" class="button button-small">%s</a>',
                 esc_url( $value ),
-                esc_html__( 'Otwórz', 'obsluga-dokumentow-ksiegowych' )
+                esc_html__( 'Otwórz', 'securedownloader' )
             );
         }
         
@@ -218,7 +234,7 @@ class PIT_Admin {
             '<label><input type="checkbox" name="%s" value="1" %s> %s</label>',
             esc_attr( $name ),
             checked( 1, $value, false ),
-            esc_html( $args['label'] ?? __( 'Tak', 'obsluga-dokumentow-ksiegowych' ) )
+            esc_html( $args['label'] ?? __( 'Tak', 'securedownloader' ) )
         );
         if ( ! empty( $args['description'] ) ) {
             printf( '<p class="description">%s</p>', esc_html( $args['description'] ) );
@@ -282,11 +298,11 @@ class PIT_Admin {
         ] );
 
         if ( empty( $users ) ) {
-            echo '<p class="description">' . esc_html__( 'Brak użytkowników do wyświetlenia.', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
+            echo '<p class="description">' . esc_html__( 'Brak użytkowników do wyświetlenia.', 'securedownloader' ) . '</p>';
             return;
         }
 
-        echo '<p class="description">' . esc_html__( 'Dodaj księgowych: wybierz jednego lub wielu (Ctrl+klik) z listy, następnie kliknij „Dodaj księgowego”.', 'obsluga-dokumentow-ksiegowych' ) . '</p>';
+        echo '<p class="description">' . esc_html__( 'Dodaj menadżerów: wybierz jednego lub wielu (Ctrl+klik) z listy, następnie kliknij „Dodaj menadżera”.', 'securedownloader' ) . '</p>';
         echo '<div style="display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-top: 8px;">';
         printf( '<input type="hidden" name="%s[]" value="">', esc_attr( $name ) );
         printf(
@@ -304,13 +320,13 @@ class PIT_Admin {
             );
         }
         echo '</select>';
-        submit_button( __( 'Dodaj księgowego', 'obsluga-dokumentow-ksiegowych' ), 'primary', 'submit', false, [ 'style' => 'width: auto;' ] );
+        submit_button( __( 'Dodaj menadżera', 'securedownloader' ), 'primary', 'submit', false, [ 'style' => 'width: auto;' ] );
         echo '</div>';
 
         if ( ! empty( $selected_ids ) ) {
-            echo '<h4 style="margin-top: 20px; margin-bottom: 8px;">' . esc_html__( 'Lista księgowych', 'obsluga-dokumentow-ksiegowych' ) . '</h4>';
+            echo '<h4 style="margin-top: 20px; margin-bottom: 8px;">' . esc_html__( 'Lista menadżerów', 'securedownloader' ) . '</h4>';
             echo '<table class="wp-list-table widefat fixed striped" style="max-width: 450px;">';
-            echo '<thead><tr><th>' . esc_html__( 'Login', 'obsluga-dokumentow-ksiegowych' ) . '</th><th style="width: 100px;">' . esc_html__( 'Usuń', 'obsluga-dokumentow-ksiegowych' ) . '</th></tr></thead>';
+            echo '<thead><tr><th>' . esc_html__( 'Login', 'securedownloader' ) . '</th><th style="width: 100px;">' . esc_html__( 'Usuń', 'securedownloader' ) . '</th></tr></thead>';
             echo '<tbody>';
             foreach ( $selected_ids as $user_id ) {
                 $user = get_user_by( 'id', $user_id );
@@ -325,8 +341,8 @@ class PIT_Admin {
                 printf(
                     '<a href="%s" class="button button-small" aria-label="%s">%s</a>',
                     esc_url( $remove_url ),
-                    esc_attr( sprintf( __( 'Usuń %s z listy księgowych', 'obsluga-dokumentow-ksiegowych' ), $user->user_login ) ),
-                    esc_html__( 'Usuń', 'obsluga-dokumentow-ksiegowych' )
+                    esc_attr( sprintf( __( 'Usuń %s z listy menadżerów', 'securedownloader' ), $user->user_login ) ),
+                    esc_html__( 'Usuń', 'securedownloader' )
                 );
                 echo '</td>';
                 echo '</tr>';
@@ -345,29 +361,29 @@ class PIT_Admin {
      * Ładuje style i skrypty tylko na stronach wtyczki.
      */
     public function enqueue_assets( string $hook ): void {
-        if ( ! str_contains( $hook, 'obsluga-dokumentow-ksiegowych' ) ) {
+        if ( ! str_contains( $hook, 'securedownloader' ) ) {
             return;
         }
 
         wp_enqueue_style(
-            'obsluga-dokumentow-ksiegowych-style',
+            'securedownloader-style',
             PIT_PLUGIN_URL . 'assets/style.css',
             [],
             pit_plugin_version()
         );
 
         wp_enqueue_script(
-            'obsluga-dokumentow-ksiegowych-script',
+            'securedownloader-script',
             PIT_PLUGIN_URL . 'assets/script.js',
             [ 'jquery' ],
             pit_plugin_version(),
             true
         );
 
-        wp_localize_script( 'obsluga-dokumentow-ksiegowych-script', 'pitManager', [
+        wp_localize_script( 'securedownloader-script', 'pitManager', [
             'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
             'nonce'         => wp_create_nonce( 'pit_manager_nonce' ),
-            'confirmDelete' => __( 'Czy na pewno usunąć ten plik?', 'obsluga-dokumentow-ksiegowych' ),
+            'confirmDelete' => __( 'Czy na pewno usunąć ten plik?', 'securedownloader' ),
         ] );
 
     }
@@ -377,7 +393,7 @@ class PIT_Admin {
      */
     public function render_dashboard(): void {
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Brak uprawnień.', 'securedownloader' ) );
         }
 
         $db     = PIT_Database::get_instance();
@@ -386,14 +402,14 @@ class PIT_Admin {
         $files  = $db->get_all_files( $year );
 
         ?>
-        <div class="wrap obsluga-dokumentow-ksiegowych-wrap">
-            <h1><?php esc_html_e( 'Wgrane PIT-y', 'obsluga-dokumentow-ksiegowych' ); ?></h1>
+        <div class="wrap securedownloader-wrap">
+            <h1><?php esc_html_e( 'Wgrane PIT-y', 'securedownloader' ); ?></h1>
 
             <?php if ( isset( $_GET['pit_set_pesel_ok'] ) && $_GET['pit_set_pesel_ok'] === '1' ) : ?>
-                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'PESEL został zapisany.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'PESEL został zapisany.', 'securedownloader' ); ?></p></div>
             <?php endif; ?>
             <?php if ( isset( $_GET['pit_set_pesel_error'] ) && $_GET['pit_set_pesel_error'] === '1' ) : ?>
-                <div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Błąd: podaj prawidłowy PESEL (11 cyfr).', 'securedownloader' ); ?></p></div>
             <?php endif; ?>
 
             <?php if ( ! empty( $years ) ) : ?>
@@ -408,7 +424,7 @@ class PIT_Admin {
                     </select>
                     <script>
                     document.getElementById('pit-year-filter').addEventListener('change', function() {
-                        window.location.href = '<?php echo esc_url( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych' ) ); ?>&year=' + this.value;
+                        window.location.href = '<?php echo esc_url( admin_url( 'admin.php?page=securedownloader-settings' ) ); ?>&year=' + this.value;
                     });
                     </script>
                 </div>
@@ -418,19 +434,19 @@ class PIT_Admin {
             <table class="wp-list-table widefat fixed striped">
                 <thead>
                     <tr>
-                        <th><?php esc_html_e( 'Lp.', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                        <th><?php esc_html_e( 'Nazwisko i imię', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                        <th><?php esc_html_e( 'PESEL', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                        <th><?php esc_html_e( 'Rok', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                        <th><?php esc_html_e( 'Wgrano', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                        <th><?php esc_html_e( 'Data pobrania', 'obsluga-dokumentow-ksiegowych' ); ?></th>
-                        <th><?php esc_html_e( 'Akcje', 'obsluga-dokumentow-ksiegowych' ); ?></th>
+                        <th><?php esc_html_e( 'Lp.', 'securedownloader' ); ?></th>
+                        <th><?php esc_html_e( 'Nazwisko i imię', 'securedownloader' ); ?></th>
+                        <th><?php esc_html_e( 'PESEL', 'securedownloader' ); ?></th>
+                        <th><?php esc_html_e( 'Rok', 'securedownloader' ); ?></th>
+                        <th><?php esc_html_e( 'Wgrano', 'securedownloader' ); ?></th>
+                        <th><?php esc_html_e( 'Data pobrania', 'securedownloader' ); ?></th>
+                        <th><?php esc_html_e( 'Akcje', 'securedownloader' ); ?></th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if ( empty( $files ) ) : ?>
                         <tr>
-                            <td colspan="7"><?php esc_html_e( 'Brak dokumentów dla wybranego roku.', 'obsluga-dokumentow-ksiegowych' ); ?></td>
+                            <td colspan="7"><?php esc_html_e( 'Brak dokumentów dla wybranego roku.', 'securedownloader' ); ?></td>
                         </tr>
                     <?php else : ?>
                         <?php $i = 1; foreach ( $files as $file ) : 
@@ -448,10 +464,10 @@ class PIT_Admin {
                                             <input type="hidden" name="action" value="pit_set_pesel">
                                             <?php wp_nonce_field( 'pit_set_pesel', 'pit_set_pesel_nonce' ); ?>
                                             <input type="hidden" name="pit_set_pesel_full_name" value="<?php echo esc_attr( $file->full_name ); ?>">
-                                            <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Nie dopasowano', 'obsluga-dokumentow-ksiegowych' ); ?></a>
+                                            <a href="#" class="pit-brak-pesel-link"><?php esc_html_e( 'Nie dopasowano', 'securedownloader' ); ?></a>
                                             <span class="pit-set-pesel-form" style="display:none;">
-                                                <input type="text" name="pit_set_pesel_value" placeholder="<?php esc_attr_e( '11 cyfr', 'obsluga-dokumentow-ksiegowych' ); ?>" maxlength="11" pattern="\d{11}" size="11" style="width:100px;">
-                                                <button type="submit" class="button button-small"><?php esc_html_e( 'Zapisz', 'obsluga-dokumentow-ksiegowych' ); ?></button>
+                                                <input type="text" name="pit_set_pesel_value" placeholder="<?php esc_attr_e( '11 cyfr', 'securedownloader' ); ?>" maxlength="11" pattern="\d{11}" size="11" style="width:100px;">
+                                                <button type="submit" class="button button-small"><?php esc_html_e( 'Zapisz', 'securedownloader' ); ?></button>
                                             </span>
                                         </form>
                                     <?php else : ?>
@@ -464,13 +480,13 @@ class PIT_Admin {
                                     <?php 
                                     echo $is_downloaded 
                                         ? esc_html( $file->last_download ) 
-                                        : '<em>' . esc_html__( 'Nie pobrano', 'obsluga-dokumentow-ksiegowych' ) . '</em>'; 
+                                        : '<em>' . esc_html__( 'Nie pobrano', 'securedownloader' ) . '</em>'; 
                                     ?>
                                 </td>
                                 <td>
                                     <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=pit_delete_file&id=' . $file->id ), 'pit_delete_' . $file->id ) ); ?>"
                                        class="button button-small button-link-delete pit-confirm-delete">
-                                        <?php esc_html_e( 'Usuń', 'obsluga-dokumentow-ksiegowych' ); ?>
+                                        <?php esc_html_e( 'Usuń', 'securedownloader' ); ?>
                                     </a>
                                 </td>
                             </tr>
@@ -487,7 +503,7 @@ class PIT_Admin {
      */
     public function render_settings(): void {
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Brak uprawnień.', 'securedownloader' ) );
         }
 
         $accountant_url = get_option( 'pit_accountant_page_url', '' );
@@ -515,24 +531,36 @@ class PIT_Admin {
                 }
             }
         }
+        $manual_url = '';
+        if ( ! empty( $accountant_url ) ) {
+            $manual_url = add_query_arg( 'pit_tab', 'manual', $accountant_url );
+        }
         ?>
-        <div class="wrap obsluga-dokumentow-ksiegowych-wrap">
-            <h1><?php esc_html_e( 'Ustawienia', 'obsluga-dokumentow-ksiegowych' ); ?></h1>
-            
+        <div class="wrap securedownloader-wrap">
+            <h1><?php esc_html_e( 'Ustawienia', 'securedownloader' ); ?></h1>
+            <?php if ( $manual_url ) : ?>
+                <p class="sd-settings-manual-link">
+                    <a href="<?php echo esc_url( $manual_url ); ?>" target="_blank" class="button button-secondary">
+                        <?php esc_html_e( 'Podręcznik użytkownika (User Manual)', 'securedownloader' ); ?>
+                    </a>
+                    <?php esc_html_e( 'Pełna instrukcja w panelu menadżera w zakładce „Podręcznik”.', 'securedownloader' ); ?>
+                </p>
+            <?php endif; ?>
+
             <?php
-            // Komunikaty po kliknięciu „Dodaj stronę” (księgowego / podatnika)
+            // Komunikaty po kliknięciu „Dodaj stronę” (menadżera / klienta)
             if ( isset( $_GET['page_created'] ) && $_GET['page_created'] === '1' ) :
                 ?>
-                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Strona została utworzona i adres został zapisany.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Strona została utworzona i adres został zapisany.', 'securedownloader' ); ?></p></div>
             <?php endif; ?>
             <?php if ( isset( $_GET['page_exists'] ) && $_GET['page_exists'] === '1' ) : ?>
-                <div class="notice notice-warning is-dismissible"><p><?php esc_html_e( 'Strona o tym adresie (slug) już istnieje. Zmień slug lub usuń istniejącą stronę w Strony → Wszystkie strony.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <div class="notice notice-warning is-dismissible"><p><?php esc_html_e( 'Strona o tym adresie (slug) już istnieje. Zmień slug lub usuń istniejącą stronę w Strony → Wszystkie strony.', 'securedownloader' ); ?></p></div>
             <?php endif; ?>
             <?php if ( isset( $_GET['page_linked'] ) && $_GET['page_linked'] === '1' ) : ?>
-                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Strona o tym adresie już istniała; adres został zapisany w ustawieniach.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Strona o tym adresie już istniała; adres został zapisany w ustawieniach.', 'securedownloader' ); ?></p></div>
             <?php endif; ?>
             <?php if ( isset( $_GET['pit_accountant_removed'] ) && $_GET['pit_accountant_removed'] === '1' ) : ?>
-                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Księgowy został usunięty z listy.', 'obsluga-dokumentow-ksiegowych' ); ?></p></div>
+                <div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Menadżer został usunięty z listy.', 'securedownloader' ); ?></p></div>
             <?php endif; ?>
             <?php if ( isset( $_GET['error'] ) ) : ?>
                 <div class="notice notice-error is-dismissible">
@@ -540,16 +568,16 @@ class PIT_Admin {
                         <?php
                         switch ( $_GET['error'] ) {
                             case 'no_url':
-                                esc_html_e( 'Błąd: brak zapisanego adresu URL. Wpisz adres w pole powyżej i kliknij „Zapisz zmiany”, a następnie „Dodaj”.', 'obsluga-dokumentow-ksiegowych' );
+                                esc_html_e( 'Błąd: brak zapisanego adresu URL. Wpisz adres w pole powyżej i kliknij „Zapisz zmiany”, a następnie „Dodaj”.', 'securedownloader' );
                                 break;
                             case 'create_failed':
-                                esc_html_e( 'Błąd: nie udało się utworzyć strony (np. brak uprawnień do tworzenia stron). Sprawdź uprawnienia użytkownika i zapis katalogu WordPress.', 'obsluga-dokumentow-ksiegowych' );
+                                esc_html_e( 'Błąd: nie udało się utworzyć strony (np. brak uprawnień do tworzenia stron). Sprawdź uprawnienia użytkownika i zapis katalogu WordPress.', 'securedownloader' );
                                 break;
                             case 'invalid_option':
-                                esc_html_e( 'Błąd: nieprawidłowa opcja.', 'obsluga-dokumentow-ksiegowych' );
+                                esc_html_e( 'Błąd: nieprawidłowa opcja.', 'securedownloader' );
                                 break;
                             default:
-                                echo esc_html( __( 'Wystąpił błąd.', 'obsluga-dokumentow-ksiegowych' ) );
+                                echo esc_html( __( 'Wystąpił błąd.', 'securedownloader' ) );
                         }
                         ?>
                     </p>
@@ -558,16 +586,16 @@ class PIT_Admin {
 
             <?php if ( empty( $accountant_url ) || empty( $client_url ) || $accountant_shortcode_missing || $client_shortcode_missing ) : ?>
                 <div class="notice notice-warning is-dismissible" style="margin-top: 10px;">
-                    <p><strong><?php esc_html_e( 'Uwaga!', 'obsluga-dokumentow-ksiegowych' ); ?></strong></p>
+                    <p><strong><?php esc_html_e( 'Uwaga!', 'securedownloader' ); ?></strong></p>
                     <?php if ( empty( $accountant_url ) ) : ?>
-                        <p><?php esc_html_e( 'Brak skonfigurowanej strony księgowego. Utwórz podstronę [/ksiegowy] z kodem [pit_accountant_panel] i wpisz jej URL powyżej.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                        <p><?php esc_html_e( 'Brak skonfigurowanej strony menadżera. Utwórz podstronę [/manager] z kodem [pit_accountant_panel] i wpisz jej URL powyżej.', 'securedownloader' ); ?></p>
                     <?php elseif ( $accountant_shortcode_missing ) : ?>
-                        <p><?php esc_html_e( 'Strona księgowego nie zawiera shortcode [pit_accountant_panel]. Dodaj go do treści strony.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                        <p><?php esc_html_e( 'Strona menadżera nie zawiera shortcode [pit_accountant_panel]. Dodaj go do treści strony.', 'securedownloader' ); ?></p>
                     <?php endif; ?>
                     <?php if ( empty( $client_url ) ) : ?>
-                        <p><?php esc_html_e( 'Brak skonfigurowanej strony podatnika. Utwórz podstronę [/podatnik] z kodem [pit_client_page] i wpisz jej URL powyżej.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                        <p><?php esc_html_e( 'Brak skonfigurowanej strony klienta. Utwórz podstronę [/securedownloader] z kodem [pit_client_page] i wpisz jej URL powyżej.', 'securedownloader' ); ?></p>
                     <?php elseif ( $client_shortcode_missing ) : ?>
-                        <p><?php esc_html_e( 'Strona podatnika nie zawiera shortcode [pit_client_page]. Dodaj go do treści strony.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                        <p><?php esc_html_e( 'Strona klienta nie zawiera shortcode [pit_client_page]. Dodaj go do treści strony.', 'securedownloader' ); ?></p>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -575,7 +603,7 @@ class PIT_Admin {
             <?php if ( get_transient( 'pit_developer_mode_saved_notice' ) ) : ?>
                 <?php delete_transient( 'pit_developer_mode_saved_notice' ); ?>
                 <div class="notice notice-success is-dismissible">
-                    <p><?php esc_html_e( 'Zmiana trybu na developerski została zapisana.', 'obsluga-dokumentow-ksiegowych' ); ?></p>
+                    <p><?php esc_html_e( 'Zmiana trybu na developerski została zapisana.', 'securedownloader' ); ?></p>
                 </div>
             <?php endif; ?>
 
@@ -584,10 +612,10 @@ class PIT_Admin {
                     <p>
                         <?php
                         if ( isset( $_GET['pit_import_updated'] ) && (int) $_GET['pit_import_updated'] > 0 ) {
-                            echo esc_html( sprintf( __( 'Zaktualizowano PESEL dla %d osób.', 'obsluga-dokumentow-ksiegowych' ), (int) $_GET['pit_import_updated'] ) );
+                            echo esc_html( sprintf( __( 'Zaktualizowano PESEL dla %d osób.', 'securedownloader' ), (int) $_GET['pit_import_updated'] ) );
                         }
                         if ( isset( $_GET['pit_import_skipped'] ) && (int) $_GET['pit_import_skipped'] > 0 ) {
-                            echo ' ' . esc_html( sprintf( __( 'Pominięto %d wierszy (błędny format lub brak dopasowania w bazie).', 'obsluga-dokumentow-ksiegowych' ), (int) $_GET['pit_import_skipped'] ) );
+                            echo ' ' . esc_html( sprintf( __( 'Pominięto %d wierszy (błędny format lub brak dopasowania w bazie).', 'securedownloader' ), (int) $_GET['pit_import_skipped'] ) );
                         }
                         ?>
                     </p>
@@ -597,9 +625,9 @@ class PIT_Admin {
             <form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>" id="pit-settings-form">
                 <?php
                 settings_fields( 'pit_options_group' );
-                echo '<input type="hidden" name="_wp_http_referer" value="' . esc_attr( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) ) . '">';
-                do_settings_sections( 'obsluga-dokumentow-ksiegowych-settings' );
-                submit_button( __( 'Zapisz zmiany', 'obsluga-dokumentow-ksiegowych' ) );
+                echo '<input type="hidden" name="_wp_http_referer" value="' . esc_attr( admin_url( 'admin.php?page=securedownloader-settings' ) ) . '">';
+                do_settings_sections( 'securedownloader-settings' );
+                submit_button( __( 'Zapisz zmiany', 'securedownloader' ) );
                 ?>
             </form>
         </div>
@@ -611,11 +639,11 @@ class PIT_Admin {
      */
     public function handle_set_pesel(): void {
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Brak uprawnień.', 'securedownloader' ) );
         }
 
         if ( ! wp_verify_nonce( $_POST['pit_set_pesel_nonce'] ?? '', 'pit_set_pesel' ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'securedownloader' ) );
         }
 
         $full_name = sanitize_text_field( $_POST['pit_set_pesel_full_name'] ?? '' );
@@ -623,24 +651,24 @@ class PIT_Admin {
         $pesel     = preg_replace( '/\D/', '', $pesel );
 
         if ( $full_name === '' || strlen( $pesel ) !== 11 ) {
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&pit_set_pesel_error=1' ) );
+            wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&pit_set_pesel_error=1' ) );
             exit;
         }
 
         $db = PIT_Database::get_instance();
         $db->update_pesel_for_person( $full_name, $pesel );
 
-        wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&pit_set_pesel_ok=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&pit_set_pesel_ok=1' ) );
         exit;
     }
 
     /**
-     * Przekierowuje do strony księgowego.
+     * Przekierowuje do strony menadżera.
      */
     public function redirect_to_accountant_page(): void {
         $url = get_option( 'pit_accountant_page_url', home_url() );
         echo '<script>window.location.href="' . esc_url( $url ) . '";</script>';
-        echo '<p>' . esc_html__( 'Przekierowywanie...', 'obsluga-dokumentow-ksiegowych' ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Kliknij tutaj', 'obsluga-dokumentow-ksiegowych' ) . '</a>.</p>';
+        echo '<p>' . esc_html__( 'Przekierowywanie...', 'securedownloader' ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Kliknij tutaj', 'securedownloader' ) . '</a>.</p>';
         exit;
     }
 
@@ -649,7 +677,7 @@ class PIT_Admin {
      */
     public function redirect_after_save(): void {
         add_action( 'admin_notices', function() {
-            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ustawienia zapisane.', 'obsluga-dokumentow-ksiegowych' ) . '</p></div>';
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ustawienia zapisane.', 'securedownloader' ) . '</p></div>';
         } );
     }
 
@@ -661,21 +689,21 @@ class PIT_Admin {
     }
 
     /**
-     * Usuwa jednego księgowego z listy (wywołane przyciskiem „Usuń” w wierszu).
+     * Usuwa jednego menadżera z listy (wywołane przyciskiem „Usuń” w wierszu).
      */
     public function handle_remove_one_accountant(): void {
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Brak uprawnień.', 'securedownloader' ) );
         }
 
         $user_id = isset( $_REQUEST['user_id'] ) ? (int) $_REQUEST['user_id'] : 0;
         if ( $user_id <= 0 ) {
-            wp_safe_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings' ) );
+            wp_safe_redirect( admin_url( 'admin.php?page=securedownloader-settings' ) );
             exit;
         }
 
         if ( ! wp_verify_nonce( $_REQUEST['_wpnonce'] ?? '', 'pit_remove_accountant_' . $user_id ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'securedownloader' ) );
         }
 
         $ids = get_option( 'pit_accountant_users', [] );
@@ -691,7 +719,7 @@ class PIT_Admin {
         delete_option( 'pit_accountant_users' );
         add_option( 'pit_accountant_users', $ids );
 
-        wp_safe_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&pit_accountant_removed=1' ) );
+        wp_safe_redirect( admin_url( 'admin.php?page=securedownloader-settings&pit_accountant_removed=1' ) );
         exit;
     }
 
@@ -700,54 +728,54 @@ class PIT_Admin {
      */
     public function handle_delete_file(): void {
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Brak uprawnień.', 'securedownloader' ) );
         }
 
         $file_id = isset( $_GET['id'] ) ? (int) $_GET['id'] : 0;
 
         if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'pit_delete_' . $file_id ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'securedownloader' ) );
         }
 
         $db = PIT_Database::get_instance();
         $db->delete_file( $file_id );
 
-        wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&deleted=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&deleted=1' ) );
         exit;
     }
 
     public function handle_create_page(): void {
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( __( 'Brak uprawnień.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Brak uprawnień.', 'securedownloader' ) );
         }
 
         $option_name = sanitize_text_field( $_GET['option_name'] ?? '' );
 
         if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'pit_create_page_' . $option_name ) ) {
-            wp_die( __( 'Błąd bezpieczeństwa.', 'obsluga-dokumentow-ksiegowych' ) );
+            wp_die( __( 'Błąd bezpieczeństwa.', 'securedownloader' ) );
         }
 
         $url = get_option( $option_name, '' );
         if ( empty( $url ) ) {
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&error=no_url' ) );
+            wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&error=no_url' ) );
             exit;
         }
 
         $page_configs = [
             'pit_accountant_page_url' => [
-                'slug'      => 'ksiegowy',
-                'title'     => __( 'Księgowy', 'obsluga-dokumentow-ksiegowych' ),
+                'slug'      => 'manager',
+                'title'     => __( 'Menadżer', 'securedownloader' ),
                 'shortcode' => '[pit_accountant_panel]',
             ],
             'pit_client_page_url' => [
-                'slug'      => 'podatnik',
-                'title'     => __( 'Podatnik', 'obsluga-dokumentow-ksiegowych' ),
+                'slug'      => 'securedownloader',
+                'title'     => __( 'Klient', 'securedownloader' ),
                 'shortcode' => '[pit_client_page]',
             ],
         ];
 
         if ( ! isset( $page_configs[ $option_name ] ) ) {
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&error=invalid_option' ) );
+            wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&error=invalid_option' ) );
             exit;
         }
 
@@ -758,7 +786,7 @@ class PIT_Admin {
             // Strona o tym slugu już istnieje – zapisz jej URL w opcji
             $existing_url = get_permalink( $existing_page );
             update_option( $option_name, $existing_url );
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&page_linked=1' ) );
+            wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&page_linked=1' ) );
             exit;
         }
 
@@ -771,14 +799,14 @@ class PIT_Admin {
         ] );
 
         if ( is_wp_error( $page_id ) ) {
-            wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&error=create_failed' ) );
+            wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&error=create_failed' ) );
             exit;
         }
 
         $new_url = get_permalink( $page_id );
         update_option( $option_name, $new_url );
 
-        wp_redirect( admin_url( 'admin.php?page=obsluga-dokumentow-ksiegowych-settings&page_created=1' ) );
+        wp_redirect( admin_url( 'admin.php?page=securedownloader-settings&page_created=1' ) );
         exit;
     }
 }

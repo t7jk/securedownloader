@@ -1,6 +1,6 @@
 <?php
 /**
- * Obsługa dokumentów księgowych - Uninstall
+ * Secure Downloader - Uninstall
  * Ten plik jest uruchamiany gdy wtyczka jest odinstalowywana.
  */
 
@@ -34,7 +34,7 @@ function pit_uninstall_rmdir( $dir ) {
 	@rmdir( $dir );
 }
 
-// Katalog uploads wtyczki (plugins/obsluga-dokumentow-ksiegowych/uploads/)
+// Katalog uploads wtyczki (plugins/securedownloader/uploads/)
 $pit_upload_dir = dirname( __FILE__ ) . '/uploads/';
 if ( is_dir( $pit_upload_dir ) ) {
 	pit_uninstall_rmdir( $pit_upload_dir );
@@ -42,7 +42,7 @@ if ( is_dir( $pit_upload_dir ) ) {
 
 // Stara lokalizacja w wp-content/uploads (na wypadek migracji)
 $upload_dir     = wp_upload_dir();
-$legacy_pit_dir = $upload_dir['basedir'] . '/obsluga-dokumentow-ksiegowych/';
+$legacy_pit_dir = $upload_dir['basedir'] . '/securedownloader/';
 if ( is_dir( $legacy_pit_dir ) ) {
 	pit_uninstall_rmdir( $legacy_pit_dir );
 }

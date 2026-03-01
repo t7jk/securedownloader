@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
-SRC="/home/t7jk/Code/PIT-downloader/"
-DST="/var/www/html/wordpress/wp-content/plugins/obsluga-dokumentow-ksiegowych/"
+SRC="/home/t7jk/Code/securedownloader/"
+DST="/var/www/html/wordpress/wp-content/plugins/securedownloader/"
 
 [[ ! -d "$DST" ]] && sudo mkdir -p "$DST" && sudo chown apache:apache "$DST"
 

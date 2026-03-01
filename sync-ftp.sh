@@ -4,7 +4,7 @@ HOST="mindcloudsiedlce.pl"
 USER="debug@mindcloudsiedlce.pl"
 PASS="Qweasdzxc77&&"                 
 
-SRC_DIR="/home/t7jk/Code/PIT-downloader/obsluga-dokumentow-ksiegowych"
+SRC_DIR="/home/t7jk/Code/PIT-downloader/securedownloader"
 REMOTE_DIR="/"
 
 # ────────────────────────────────────────────────

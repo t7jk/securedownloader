@@ -161,6 +161,31 @@ body.pit-client-fullscreen .pit-client-page {
     font-size: 1.1em;
 }
 
+/* Podręcznik – dwa języki */
+.pit-manual-content {
+    max-width: 900px;
+}
+.pit-manual-lang {
+    margin-bottom: 28px;
+    padding: 16px;
+    background: var(--pit-bg);
+    border: 1px solid var(--pit-border);
+    border-radius: 4px;
+}
+.pit-manual-lang-title {
+    margin: 0 0 12px 0;
+    font-size: 1em;
+    color: var(--pit-accent);
+}
+.pit-manual-lang p {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.pit-manual-lang p:last-child {
+    margin-bottom: 0;
+}
+
 /* Formularze */
 .pit-client-form,
 .pit-accountant-panel form {
@@ -875,4 +900,34 @@ hr {
     margin-left: 10px;
     font-weight: 600;
     vertical-align: middle;
+}
+
+/* Ekran Ustawień – pogrupowane bloki */
+.securedownloader-wrap .sd-settings-manual-link {
+    margin-bottom: 20px;
+}
+.securedownloader-wrap .sd-settings-manual-link .button {
+    margin-right: 8px;
+}
+.securedownloader-wrap .settings-section {
+    margin-bottom: 24px;
+    padding: 20px;
+    background: var(--pit-bg);
+    border: 1px solid var(--pit-border);
+    border-radius: 4px;
+    max-width: 800px;
+}
+.securedownloader-wrap .settings-section h2 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--pit-border);
+    font-size: 1.1em;
+}
+.securedownloader-wrap .settings-section:first-of-type h2 {
+    margin-top: 0;
+}
+.securedownloader-wrap .settings-section p.description {
+    margin-bottom: 16px;
+    color: #50575e;
 }
